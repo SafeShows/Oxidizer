@@ -45,6 +45,11 @@ On first run without `--game`, the loader creates `oxidizer.toml` next to the ex
 
 ## Mods
 
+**Starting a mod:** use a template, with a working example, a release workflow and the content-index listing:
+[Rhai](https://github.com/SafeShows/oxidizer-rhai-mod-template) or
+[Rust](https://github.com/SafeShows/oxidizer-rust-mod-template) (**Use this template** on GitHub).
+
+
 A mod is a folder in `Documents/My Games/Kitten Space Agency/mods/<id>/` whose `mod.toml` has a `[oxidizer]` section:
 
 ```toml
