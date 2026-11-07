@@ -5,6 +5,10 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-11-07
+
+Rust mods: the new API is in `oxidizer_api` 0.3.0.
+
 ### Added
 
 - Typed Rust bindings: `oxidizer --bindgen ksa.rs` writes a Rust module with a type for every public `KSA.dll` type and methods for its public methods, properties, fields and constructors, plus constants for enums. Calls go by exact metadata token, so overloads are no longer guessed, and the file refuses to run against a different game build.
@@ -65,7 +69,8 @@ First release.
 - When a method has several overloads, `call` and patching use the first one with a matching number of arguments.
 - Hooks can't read or change a patched method's return value.
 
-[Unreleased]: https://github.com/SafeShows/Oxidizer/compare/v0.3.0...HEAD
+[Unreleased]: https://github.com/SafeShows/Oxidizer/compare/v0.4.0...HEAD
+[0.4.0]: https://github.com/SafeShows/Oxidizer/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/SafeShows/Oxidizer/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/SafeShows/Oxidizer/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/SafeShows/Oxidizer/releases/tag/v0.1.0

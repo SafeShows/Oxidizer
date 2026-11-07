@@ -57,7 +57,7 @@ Mods set `enabled = false` in KSA's `manifest.toml` are skipped. See `examples/`
 
 ### Rust
 
-The crate is a `cdylib` that depends on `oxidizer_api`. The API crate has its own version, separate from Oxidizer's: it only changes when something changes for mod authors, so `oxidizer_api = "0.2"` works with Oxidizer 0.2 and later, and `cargo update` picks up fixes. `Mod` has `init`, `frame`, `gui`, `menu` (entries in the game's Mods menu) and `unload`; all but `init` are optional.
+The crate is a `cdylib` that depends on `oxidizer_api`. The API crate has its own version, separate from Oxidizer's: it only changes when something changes for mod authors, so `oxidizer_api = "0.3"` works with Oxidizer 0.4 and later, and `cargo update` picks up fixes. `Mod` has `init`, `frame`, `gui`, `menu` (entries in the game's Mods menu) and `unload`; all but `init` are optional.
 
 ```rust
 use oxidizer_api::{Mod, Obj, imgui};
