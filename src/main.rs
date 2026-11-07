@@ -13,10 +13,20 @@ use std::ffi::c_void;
 use std::path::PathBuf;
 use std::{env, fs};
 
-#[cfg(windows)]
-const DEFAULT_GAME: &str = r"C:\Program Files\Ahwoo\Games\Kitten Space Agency";
-#[cfg(not(windows))]
-const DEFAULT_GAME: &str = "";
+/// Where the game usually is: the Windows installer's folder, or the macOS port's app (it installs to
+/// ~/Applications). Linux has no usual place.
+fn default_game() -> String {
+    if cfg!(windows) {
+        return r"C:\Program Files\Ahwoo\Games\Kitten Space Agency".into();
+    }
+    let app = "Applications/Kitten Space Agency.app/Contents/Resources";
+    let home = PathBuf::from(env::var_os("HOME").unwrap_or_default()).join(app);
+    [home, PathBuf::from("/").join(app)]
+        .into_iter()
+        .find(|p| cfg!(target_os = "macos") && p.join("KSA.dll").exists())
+        .map(|p| p.display().to_string())
+        .unwrap_or_default()
+}
 
 /// hostfxr's `char_t`: UTF-16 on Windows, UTF-8 elsewhere.
 #[cfg(windows)]
@@ -71,11 +81,12 @@ fn game_dir(args: &mut Vec<String>) -> PathBuf {
     match fs::read_to_string(&cfg) {
         Ok(s) => {
             let t: toml::Table = s.parse().unwrap_or_else(|e| fail(&format!("{}: {e}", cfg.display())));
-            t.get("game_path").and_then(|v| v.as_str()).unwrap_or(DEFAULT_GAME).into()
+            t.get("game_path").and_then(|v| v.as_str()).map(String::from).unwrap_or_else(default_game).into()
         }
         Err(_) => {
-            let _ = fs::write(&cfg, format!("game_path = '{DEFAULT_GAME}'\n"));
-            DEFAULT_GAME.into()
+            let game = default_game();
+            let _ = fs::write(&cfg, format!("game_path = '{game}'\n"));
+            game.into()
         }
     }
 }
@@ -132,6 +143,39 @@ fn hostfxr(game: &std::path::Path) -> (PathBuf, PathBuf) {
     fail(&format!("no {} next to KSA.dll, in DOTNET_ROOT or in ../MacOS/host/fxr", file.to_string_lossy()))
 }
 
+/// The macOS port's app runs the game through its launcher (Contents/MacOS/KSA), which sets the environment the
+/// game needs: the .NET root, the game's dylibs, its GLFW/KTX shims (DYLD_INSERT_LIBRARIES, so only at process
+/// start) and its Metal startup hook. Restart Oxidizer with that environment, unless it is already set.
+#[cfg(target_os = "macos")]
+fn macos_port_env(game: &std::path::Path) {
+    use std::os::unix::process::CommandExt;
+    let game = game.canonicalize().unwrap();
+    let macos = game.join("../MacOS");
+    if env::var_os("KSA_PORT_LAUNCHER").is_some() || !macos.join("KSA").exists() {
+        return;
+    }
+    let mut shims: Vec<String> = fs::read_dir(&game)
+        .into_iter()
+        .flatten()
+        .flatten()
+        .map(|e| e.path())
+        .filter(|p| p.to_string_lossy().ends_with("Shim.dylib"))
+        .map(|p| p.display().to_string())
+        .collect();
+    shims.sort();
+    let mut cmd = std::process::Command::new(env::current_exe().unwrap());
+    cmd.args(env::args_os().skip(1))
+        .env("KSA_PORT_LAUNCHER", macos.join("KSA"))
+        .env("DOTNET_ROOT", &macos)
+        .env("DYLD_LIBRARY_PATH", &game)
+        .env("DYLD_INSERT_LIBRARIES", shims.join(":"));
+    let hook = game.join("Hooks/KsaMetalHooksLoader.dll");
+    if hook.exists() {
+        cmd.env("DOTNET_STARTUP_HOOKS", hook);
+    }
+    fail(&format!("could not restart with the macOS port's environment: {}", cmd.exec()));
+}
+
 fn main() {
     let mut args: Vec<String> = env::args().skip(1).collect();
     let bindgen = bindgen_out(&mut args);
@@ -142,6 +186,8 @@ fn main() {
         fail(&format!("KSA.dll not found in '{}'; set game_path in oxidizer.toml next to the exe, or pass --game <folder>", game.display()));
     }
     let bridge = bridge_dir();
+    #[cfg(target_os = "macos")]
+    macos_port_env(&game);
     env::set_current_dir(&game).unwrap();
 
     let (hostfxr_path, dotnet_root) = hostfxr(&game);

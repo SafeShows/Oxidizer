@@ -5,6 +5,10 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ## [Unreleased]
 
+### Added
+
+- Standalone Oxidizer on macOS: `oxidizer-macos` finds the [macOS port](https://github.com/renancamm/ksa-macos-port)'s app in `~/Applications` (or `/Applications`) and restarts itself with the environment the port's launcher sets up (its .NET runtime, GLFW/KTX shims and Metal hooks), so it runs with no setup. Tested on an M3 Pro.
+
 ## [0.6.0] - 2026-11-07
 
 ### Added

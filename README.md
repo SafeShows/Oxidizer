@@ -20,7 +20,7 @@ The [releases](https://github.com/SafeShows/Oxidizer/releases) have two zips, ea
 
 **Standalone:**
 1. Unzip `Oxidizer-X.Y.Z.zip` anywhere.
-2. Run `oxidizer.exe` (Linux: `./oxidizer`). If KSA isn't installed at the default path, set `game_path` in the `oxidizer.toml` it creates next to the exe. On Linux there is no default, so set it on the first run.
+2. Run `oxidizer.exe` (Linux: `./oxidizer`, Mac: `./oxidizer-macos`). If KSA isn't installed at the default path, set `game_path` in the `oxidizer.toml` it creates next to the exe. On Linux there is no default, so set it on the first run. On a Mac the default is the port's app in `~/Applications` (`game_path` is its `Contents/Resources` folder); Oxidizer sets up the environment the port's launcher would, and the game's output goes to `logs/console.log` in the game's documents folder, as with the launcher.
 
 To try the example mods, copy the folders from `example-mods/` in the standalone zip into `Documents/My Games/Kitten Space Agency/mods/`. Mod managers such as Borea install either one for you.
 
