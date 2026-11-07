@@ -44,6 +44,11 @@ name = "my_mod"
 [oxidizer]
 dll = "my_mod.dll"      # Rust mod
 script = "main.rhai"    # and/or Rhai script
+
+# Tells mod managers such as Borea which loader this mod needs.
+[loader]
+id = "Oxidizer"
+min = "0.2.0"
 ```
 
 Mods set `enabled = false` in KSA's `manifest.toml` are skipped. See `examples/` for working mods. To install one, copy its folder into `mods/`; for a Rust mod, also copy in the built `.dll`.

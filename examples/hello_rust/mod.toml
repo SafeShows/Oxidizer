@@ -2,3 +2,8 @@ name = "hello_rust"
 
 [oxidizer]
 dll = "hello_rust.dll"
+
+# Tells mod managers such as Borea which loader this mod needs.
+[loader]
+id = "Oxidizer"
+min = "0.2.0"
