@@ -107,6 +107,31 @@ fn bridge_dir() -> PathBuf {
         .unwrap_or_else(|| fail("bridge/Oxidizer.Bridge.dll not found next to the exe (build bridge/ first)"))
 }
 
+/// The hostfxr to start .NET with, and the .NET root it belongs to. Windows and Linux builds of the game are
+/// self-contained, so it sits next to KSA.dll. The macOS port (github.com/renancamm/ksa-macos-port) uses Microsoft's
+/// shared runtime instead: its launcher sets DOTNET_ROOT, and the app bundle keeps it in Contents/MacOS, next to the
+/// game's Contents/Resources.
+fn hostfxr(game: &std::path::Path) -> (PathBuf, PathBuf) {
+    let file = libloading::library_filename("hostfxr");
+    if game.join(&file).exists() {
+        return (game.join(&file), game.to_path_buf());
+    }
+    let roots = env::var_os("DOTNET_ROOT").map(PathBuf::from).into_iter().chain([game.join("../MacOS")]);
+    for root in roots {
+        // host/fxr/<version>/: the newest version
+        let Ok(versions) = fs::read_dir(root.join("host/fxr")) else { continue };
+        let newest = versions
+            .flatten()
+            .map(|v| v.path())
+            .filter(|v| v.join(&file).exists())
+            .max_by_key(|v| v.file_name().unwrap().to_string_lossy().split('.').map(|n| n.parse::<u32>().unwrap_or(0)).collect::<Vec<_>>());
+        if let Some(dir) = newest {
+            return (dir.join(&file), root);
+        }
+    }
+    fail(&format!("no {} next to KSA.dll, in DOTNET_ROOT or in ../MacOS/host/fxr", file.to_string_lossy()))
+}
+
 fn main() {
     let mut args: Vec<String> = env::args().skip(1).collect();
     let bindgen = bindgen_out(&mut args);
@@ -119,8 +144,7 @@ fn main() {
     let bridge = bridge_dir();
     env::set_current_dir(&game).unwrap();
 
-    // The game ships its own runtime (self-contained), so use its hostfxr.
-    let hostfxr_path = game.join(libloading::library_filename("hostfxr"));
+    let (hostfxr_path, dotnet_root) = hostfxr(&game);
     let hostfxr = unsafe { Library::new(&hostfxr_path) }.unwrap_or_else(|e| fail(&format!("{}: {e}", hostfxr_path.display())));
     unsafe {
         let init: libloading::Symbol<InitCmdLine> = hostfxr.get(b"hostfxr_initialize_for_dotnet_command_line\0").unwrap();
@@ -129,7 +153,7 @@ fn main() {
 
         let argv_s: Vec<Vec<CharT>> = std::iter::once(host_str(&ksa_dll)).chain(args.iter().map(host_str)).collect();
         let argv: Vec<*const CharT> = argv_s.iter().map(|a| a.as_ptr()).collect();
-        let (host_path, root) = (host_str(env::current_exe().unwrap()), host_str(&game));
+        let (host_path, root) = (host_str(env::current_exe().unwrap()), host_str(&dotnet_root));
         let params = InitParams { size: size_of::<InitParams>(), host_path: host_path.as_ptr(), dotnet_root: root.as_ptr() };
         let mut ctx = std::ptr::null_mut();
         check("hostfxr init", init(argv.len() as i32, argv.as_ptr(), &params, &mut ctx));

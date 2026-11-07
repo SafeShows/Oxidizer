@@ -1,6 +1,6 @@
-# Push a tag like v0.1.0 to build and publish a GitHub release with two zips, each with the Windows and the
-# Linux build side by side:
-#   Oxidizer-<version>.zip           standalone Oxidizer (an Oxidizer/ folder with oxidizer.exe and oxidizer)
+# Push a tag like v0.1.0 to build and publish a GitHub release with two zips, each with the Windows, Linux and
+# macOS (Apple Silicon) builds side by side:
+#   Oxidizer-<version>.zip           standalone Oxidizer (an Oxidizer/ folder with oxidizer.exe, oxidizer, oxidizer-macos)
 #   Oxidizer.StarMap-<version>.zip   Oxidizer as a StarMap mod (an Oxidizer.StarMap/ folder for mods/)
 # Why not per-platform zips: the content index wants every launch file in the main archive and in each
 # <stem>-<platform>.zip too. Why these names: with two zips in one release, the index takes the one named
@@ -22,12 +22,19 @@ jobs:
         include:
           - os: windows-latest
             exe: oxidizer.exe
+            exe_out: oxidizer.exe
             core: oxidizer_core.dll
             modlib: hello_rust.dll
           - os: ubuntu-latest
             exe: oxidizer
+            exe_out: oxidizer
             core: liboxidizer_core.so
             modlib: libhello_rust.so
+          - os: macos-latest # Apple Silicon, like the macOS port
+            exe: oxidizer
+            exe_out: oxidizer-macos # the Linux one is already called oxidizer
+            core: liboxidizer_core.dylib
+            modlib: libhello_rust.dylib
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v5
@@ -45,7 +52,8 @@ jobs:
         run: |
           $d = "dist/Oxidizer"
           New-Item -ItemType Directory -Force "$d/bridge", "$d/example-mods/hello_rust/bin", "$d/example-mods/hello_rhai" | Out-Null
-          Copy-Item target/release/${{ matrix.exe }}, README.md, LICENSE, CHANGELOG.md $d
+          Copy-Item target/release/${{ matrix.exe }} "$d/${{ matrix.exe_out }}"
+          Copy-Item README.md, LICENSE, CHANGELOG.md $d
           & ($IsWindows ? "python" : "python3") scripts/notices.py "$d/THIRD-PARTY-NOTICES.txt"
           if ($LASTEXITCODE) { exit 1 }
           Copy-Item target/bridge/0Harmony.dll, target/bridge/Oxidizer.Bridge.dll "$d/bridge"
@@ -97,6 +105,7 @@ jobs:
           mkdir both
           tar -xf dist-Windows.tar -C both
           tar -xf dist-Linux.tar -C both
+          tar -xf dist-macOS.tar -C both
           cd both
           zip -qr "../Oxidizer-$version.zip" Oxidizer
           zip -qr "../Oxidizer.StarMap-$version.zip" Oxidizer.StarMap

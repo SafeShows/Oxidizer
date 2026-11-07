@@ -5,6 +5,11 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ## [Unreleased]
 
+### Added
+
+- macOS (Apple Silicon) builds, for the [macOS port](https://github.com/renancamm/ksa-macos-port) of the game: `liboxidizer_core.dylib` in the StarMap mod and `oxidizer-macos` in the standalone zip. Not tested on a Mac yet.
+- Standalone Oxidizer finds .NET through `DOTNET_ROOT`, or in the app bundle's `Contents/MacOS`, when the game folder has no `hostfxr` of its own (the macOS port uses Microsoft's shared runtime).
+
 ## [0.5.0] - 2026-11-07
 
 ### Added

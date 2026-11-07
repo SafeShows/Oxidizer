@@ -1,6 +1,6 @@
 """Write THIRD-PARTY-NOTICES.txt for the release zip.
 
-Covers every crate compiled into the oxidizer executable on Windows or Linux (from `cargo metadata`) and the
+Covers every crate compiled into the oxidizer executable on Windows, Linux or macOS (from `cargo metadata`) and the
 libraries inside bridge/0Harmony.dll. Usage: python scripts/notices.py <out file>
 """
 
@@ -40,7 +40,8 @@ HARMONY_BUNDLED = [
 def crates():
     meta = json.loads(subprocess.check_output(
         ["cargo", "metadata", "--format-version", "1",
-         "--filter-platform", "x86_64-pc-windows-msvc", "--filter-platform", "x86_64-unknown-linux-gnu"],
+         "--filter-platform", "x86_64-pc-windows-msvc", "--filter-platform", "x86_64-unknown-linux-gnu",
+         "--filter-platform", "aarch64-apple-darwin"],
         cwd=ROOT))
     pkgs = {p["id"]: p for p in meta["packages"]}
     nodes = {n["id"]: n for n in meta["resolve"]["nodes"]}
