@@ -1,21 +1,75 @@
 # Push a tag like v0.1.0 to build and publish a GitHub release.
+# Oxidizer-<tag>.zip is the Windows build (and the default archive for the content index),
+# Oxidizer-<tag>-linux.zip the Linux build.
 name: release
 
 on:
   push:
     tags: ["v*"]
+  workflow_dispatch: # manual run: builds both zips as artifacts, publishes nothing
+
+
 
 permissions:
   contents: write
 
 jobs:
-  release:
-    runs-on: windows-latest
+  build:
+    strategy:
+      matrix:
+        include:
+          - os: windows-latest
+            suffix: ""
+            exe: oxidizer.exe
+            modlib: hello_rust.dll
+          - os: ubuntu-latest
+            suffix: "-linux"
+            exe: oxidizer
+            modlib: libhello_rust.so
+    runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v5
       - uses: actions/setup-dotnet@v5
         with:
           dotnet-version: 10.0.x
+
+      - name: Build
+        run: |
+          dotnet build bridge -c Release -o target/bridge
+          cargo build --release --workspace
+
+      - name: Package
+        shell: pwsh
+        run: |
+          $d = "dist/Oxidizer"
+          New-Item -ItemType Directory -Force "$d/bridge", "$d/example-mods/hello_rust", "$d/example-mods/hello_rhai" | Out-Null
+          Copy-Item target/release/${{ matrix.exe }}, README.md, LICENSE, CHANGELOG.md $d
+          & ($IsWindows ? "python" : "python3") scripts/notices.py "$d/THIRD-PARTY-NOTICES.txt"
+          if ($LASTEXITCODE) { exit 1 }
+          Copy-Item target/bridge/0Harmony.dll, target/bridge/Oxidizer.Bridge.dll "$d/bridge"
+          Copy-Item examples/hello_rust/mod.toml, target/release/${{ matrix.modlib }} "$d/example-mods/hello_rust"
+          Copy-Item examples/hello_rhai/* "$d/example-mods/hello_rhai"
+
+      - name: Zip (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: Compress-Archive dist/Oxidizer "Oxidizer-${{ github.ref_name }}.zip"
+
+      - name: Zip (Linux, keeps the executable bit)
+        if: runner.os == 'Linux'
+        run: cd dist && zip -qr "../Oxidizer-${{ github.ref_name }}${{ matrix.suffix }}.zip" Oxidizer
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: zip-${{ matrix.os }}
+          path: Oxidizer-*.zip
+
+  release:
+    needs: build
+    if: startsWith(github.ref, 'refs/tags/')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
 
       # Release notes are the tag's section of CHANGELOG.md; no section, no release.
       - name: Release notes
@@ -28,25 +82,11 @@ jobs:
           }
           $Matches[1].Trim() | Set-Content notes.md
 
-      - name: Build
-        run: |
-          dotnet build bridge -c Release -o target/bridge
-          cargo build --release --workspace
-
-      - name: Package
-        shell: pwsh
-        run: |
-          $d = "dist/Oxidizer"
-          New-Item -ItemType Directory -Force "$d/bridge", "$d/example-mods/hello_rust", "$d/example-mods/hello_rhai" | Out-Null
-          Copy-Item target/release/oxidizer.exe, README.md, LICENSE, CHANGELOG.md $d
-          python scripts/notices.py "$d/THIRD-PARTY-NOTICES.txt"
-          if ($LASTEXITCODE) { exit 1 }
-          Copy-Item target/bridge/0Harmony.dll, target/bridge/Oxidizer.Bridge.dll "$d/bridge"
-          Copy-Item examples/hello_rust/mod.toml, target/release/hello_rust.dll "$d/example-mods/hello_rust"
-          Copy-Item examples/hello_rhai/* "$d/example-mods/hello_rhai"
-          Compress-Archive "$d" "Oxidizer-${{ github.ref_name }}.zip"
+      - uses: actions/download-artifact@v4
+        with:
+          merge-multiple: true
 
       - name: Release
         env:
           GH_TOKEN: ${{ github.token }}
-        run: gh release create "${{ github.ref_name }}" "Oxidizer-${{ github.ref_name }}.zip" --title "Oxidizer ${{ github.ref_name }}" --notes-file notes.md
+        run: gh release create "${{ github.ref_name }}" Oxidizer-*.zip --title "Oxidizer ${{ github.ref_name }}" --notes-file notes.md

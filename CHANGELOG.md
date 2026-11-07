@@ -5,6 +5,16 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ## [Unreleased]
 
+### Added
+
+- Linux support. Releases include `Oxidizer-<version>-linux.zip` next to the Windows zip.
+- `dll` in `mod.toml` can be written without an extension (`dll = "my_mod"`), and loads `my_mod.dll` on Windows or `libmy_mod.so` on Linux. A name with `.dll` still works, and falls back to the Linux library on Linux.
+
+### Changed
+
+- ImGui calls go through the plain C functions the game itself uses, instead of C++ names that only exist on Windows.
+- The example mods declare `[loader] id = "Oxidizer"` in their `mod.toml`, which mod managers such as Borea read.
+
 ## [0.2.0] - 2026-11-07
 
 ### Added

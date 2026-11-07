@@ -1,11 +1,11 @@
 # Oxidizer
 
-A mod loader for Kitten Space Agency, written in Rust. Mods can be written in Rust (cdylib) or as Rhai scripts.
+A mod loader for Kitten Space Agency, written in Rust. Mods can be written in Rust (cdylib) or as Rhai scripts. Runs on Windows and Linux.
 
 ![The two example mods, one in Rhai and one in Rust, drawing ImGui windows in game](docs/screenshot.png)
 
 KSA is a .NET 10 game, so the loader:
-1. loads the game's own `hostfxr.dll` and starts its runtime with `KSA.dll`,
+1. loads the game's own `hostfxr` (`hostfxr.dll` / `libhostfxr.so`) and starts its runtime with `KSA.dll`,
 2. injects `bridge/` (a small C# DLL plus Harmony), which hooks `Program.OnFrame`, `Program.OnDrawUiViewports` and the game's menu bar, and gives mods reflection access to game objects,
 3. loads the mods, then runs the game's `Main`.
 
@@ -13,8 +13,8 @@ In game, **Mods > Oxidizer** in the menu bar opens a window that lists the loade
 
 ## Install
 
-1. Download `Oxidizer-vX.Y.Z.zip` from [Releases](https://github.com/SafeShows/Oxidizer/releases) and unzip it anywhere.
-2. Run `oxidizer.exe`. If KSA isn't installed at the default path, set `game_path` in the `oxidizer.toml` it creates next to the exe.
+1. Download `Oxidizer-vX.Y.Z.zip` (Windows) or `Oxidizer-vX.Y.Z-linux.zip` (Linux) from [Releases](https://github.com/SafeShows/Oxidizer/releases) and unzip it anywhere.
+2. Run `oxidizer.exe` (Linux: `./oxidizer`). If KSA isn't installed at the default path, set `game_path` in the `oxidizer.toml` it creates next to the exe. On Linux there is no default, so set it on the first run.
 3. To try the examples, copy the folders from `example-mods/` into `Documents/My Games/Kitten Space Agency/mods/`.
 
 ## Build
@@ -30,7 +30,7 @@ cargo build --release --workspace
 target/release/oxidizer.exe [--game "<KSA folder>"] [-InstancePath "<folder>"] [game args...]
 ```
 
-On first run without `--game`, the loader creates `oxidizer.toml` next to the exe (`game_path = '...'`). It defaults to `C:\Program Files\Ahwoo\Games\Kitten Space Agency`.
+On first run without `--game`, the loader creates `oxidizer.toml` next to the exe (`game_path = '...'`). On Windows it defaults to `C:\Program Files\Ahwoo\Games\Kitten Space Agency`; on Linux, set it yourself.
 
 `-InstancePath`, or the `OXIDIZER_INSTANCE_PATH` environment variable, makes the game use that folder instead of `Documents/My Games/Kitten Space Agency` for mods, saves and settings. Mod managers such as Borea use it for separate game profiles.
 
@@ -42,7 +42,7 @@ A mod is a folder in `Documents/My Games/Kitten Space Agency/mods/<id>/` whose `
 name = "my_mod"
 
 [oxidizer]
-dll = "my_mod.dll"      # Rust mod
+dll = "my_mod"          # Rust mod: my_mod.dll on Windows, libmy_mod.so on Linux
 script = "main.rhai"    # and/or Rhai script
 
 # Tells mod managers such as Borea which loader this mod needs.
@@ -51,7 +51,7 @@ id = "Oxidizer"
 min = "0.2.0"
 ```
 
-Mods set `enabled = false` in KSA's `manifest.toml` are skipped. See `examples/` for working mods. To install one, copy its folder into `mods/`; for a Rust mod, also copy in the built `.dll`.
+Mods set `enabled = false` in KSA's `manifest.toml` are skipped. See `examples/` for working mods. To install one, copy its folder into `mods/`; for a Rust mod, also copy in the built library (`.dll` on Windows, `lib*.so` on Linux). A mod for both platforms can ship both files.
 
 ### Rust
 

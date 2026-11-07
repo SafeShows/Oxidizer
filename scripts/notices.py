@@ -1,6 +1,6 @@
 """Write THIRD-PARTY-NOTICES.txt for the release zip.
 
-Covers every crate compiled into oxidizer.exe (from `cargo metadata`) and the
+Covers every crate compiled into the oxidizer executable (for the platform it runs on) (from `cargo metadata`) and the
 libraries inside bridge/0Harmony.dll. Usage: python scripts/notices.py <out file>
 """
 
@@ -37,9 +37,14 @@ HARMONY_BUNDLED = [
 ]
 
 
+def host_target():
+    out = subprocess.check_output(["rustc", "-vV"], text=True)
+    return next(l.split(": ", 1)[1] for l in out.splitlines() if l.startswith("host: "))
+
+
 def crates():
     meta = json.loads(subprocess.check_output(
-        ["cargo", "metadata", "--format-version", "1", "--filter-platform", "x86_64-pc-windows-msvc"],
+        ["cargo", "metadata", "--format-version", "1", "--filter-platform", host_target()],
         cwd=ROOT))
     pkgs = {p["id"]: p for p in meta["packages"]}
     nodes = {n["id"]: n for n in meta["resolve"]["nodes"]}
@@ -77,7 +82,7 @@ def main(out):
     for name, url, copyright in HARMONY_BUNDLED:
         parts += [rule, f"{name} (merged into bridge/0Harmony.dll)\n{url}\nMIT", rule, f"MIT License\n\n{copyright}\n\n{MIT}", ""]
     for p in crates():
-        head = f"{p['name']} {p['version']} (compiled into oxidizer.exe)\n{p.get('repository') or 'https://crates.io/crates/' + p['name']}\n{p['license']}"
+        head = f"{p['name']} {p['version']} (compiled into oxidizer)\n{p.get('repository') or 'https://crates.io/crates/' + p['name']}\n{p['license']}"
         files = license_files(p)
         body = "\n\n".join(f"--- {f.name} ---\n{f.read_text(encoding='utf-8', errors='replace').strip()}" for f in files)
         parts += [rule, head, rule, body or f"No license file ships with this crate. It is licensed under {p['license']}; see its repository.", ""]

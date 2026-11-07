@@ -13,29 +13,37 @@ use oxidizer_api::{Api, imgui};
 use libloading::Library;
 use std::ffi::c_void;
 use std::mem::MaybeUninit;
-use std::os::windows::ffi::OsStrExt;
 use std::path::{Path, PathBuf};
 use std::sync::OnceLock;
 use std::{env, fs};
 
+#[cfg(windows)]
 const DEFAULT_GAME: &str = r"C:\Program Files\Ahwoo\Games\Kitten Space Agency";
+#[cfg(not(windows))]
+const DEFAULT_GAME: &str = "";
 
-type InitCmdLine = unsafe extern "C" fn(i32, *const *const u16, *const InitParams, *mut *mut c_void) -> i32;
+/// hostfxr's `char_t`: UTF-16 on Windows, UTF-8 elsewhere.
+#[cfg(windows)]
+type CharT = u16;
+#[cfg(not(windows))]
+type CharT = u8;
+
+type InitCmdLine = unsafe extern "C" fn(i32, *const *const CharT, *const InitParams, *mut *mut c_void) -> i32;
 type GetDelegate = unsafe extern "C" fn(*mut c_void, i32, *mut *mut c_void) -> i32;
 type RunApp = unsafe extern "C" fn(*mut c_void) -> i32;
-type LoadAssembly = unsafe extern "C" fn(*const u16, *mut c_void, *mut c_void) -> i32;
-type GetFnPtr = unsafe extern "C" fn(*const u16, *const u16, *const u16, *mut c_void, *mut c_void, *mut *mut c_void) -> i32;
+type LoadAssembly = unsafe extern "C" fn(*const CharT, *mut c_void, *mut c_void) -> i32;
+type GetFnPtr = unsafe extern "C" fn(*const CharT, *const CharT, *const CharT, *mut c_void, *mut c_void, *mut *mut c_void) -> i32;
 type BridgeInit = unsafe extern "C" fn(*mut Api, *const Host) -> i32;
 
 const HDT_GET_FUNCTION_POINTER: i32 = 6;
 const HDT_LOAD_ASSEMBLY: i32 = 7;
-const UNMANAGED_CALLERS_ONLY: *const u16 = usize::MAX as *const u16;
+const UNMANAGED_CALLERS_ONLY: *const CharT = usize::MAX as *const CharT;
 
 #[repr(C)]
 struct InitParams {
     size: usize,
-    host_path: *const u16,
-    dotnet_root: *const u16,
+    host_path: *const CharT,
+    dotnet_root: *const CharT,
 }
 
 /// Callbacks and settings for the bridge. Field order must match `Host` in `bridge/Bridge.cs`.
@@ -95,8 +103,13 @@ extern "C" fn on_menu() {
     }
 }
 
-fn wide(s: impl AsRef<std::ffi::OsStr>) -> Vec<u16> {
-    s.as_ref().encode_wide().chain([0]).collect()
+/// A NUL-terminated string for hostfxr.
+fn host_str(s: impl AsRef<std::ffi::OsStr>) -> Vec<CharT> {
+    #[cfg(windows)]
+    let units = std::os::windows::ffi::OsStrExt::encode_wide(s.as_ref());
+    #[cfg(not(windows))]
+    let units = std::os::unix::ffi::OsStrExt::as_bytes(s.as_ref()).iter().copied();
+    units.chain([0]).collect()
 }
 
 fn check(what: &str, rc: i32) {
@@ -154,21 +167,22 @@ fn main() {
     let instance = instance_path(&mut args);
     let ksa_dll = game.join("KSA.dll");
     if !ksa_dll.exists() {
-        fail(&format!("KSA.dll not found in {}", game.display()));
+        fail(&format!("KSA.dll not found in '{}'; set game_path in oxidizer.toml next to the exe, or pass --game <folder>", game.display()));
     }
     let bridge = bridge_dir();
     env::set_current_dir(&game).unwrap();
 
     // The game ships its own runtime (self-contained), so use its hostfxr.
-    let hostfxr = unsafe { Library::new(game.join("hostfxr.dll")) }.unwrap_or_else(|e| fail(&format!("hostfxr.dll: {e}")));
+    let hostfxr_path = game.join(libloading::library_filename("hostfxr"));
+    let hostfxr = unsafe { Library::new(&hostfxr_path) }.unwrap_or_else(|e| fail(&format!("{}: {e}", hostfxr_path.display())));
     unsafe {
         let init: libloading::Symbol<InitCmdLine> = hostfxr.get(b"hostfxr_initialize_for_dotnet_command_line\0").unwrap();
         let get_delegate: libloading::Symbol<GetDelegate> = hostfxr.get(b"hostfxr_get_runtime_delegate\0").unwrap();
         let run_app: libloading::Symbol<RunApp> = hostfxr.get(b"hostfxr_run_app\0").unwrap();
 
-        let argv_w: Vec<Vec<u16>> = std::iter::once(wide(&ksa_dll)).chain(args.iter().map(wide)).collect();
-        let argv: Vec<*const u16> = argv_w.iter().map(|a| a.as_ptr()).collect();
-        let (host_path, root) = (wide(env::current_exe().unwrap()), wide(&game));
+        let argv_s: Vec<Vec<CharT>> = std::iter::once(host_str(&ksa_dll)).chain(args.iter().map(host_str)).collect();
+        let argv: Vec<*const CharT> = argv_s.iter().map(|a| a.as_ptr()).collect();
+        let (host_path, root) = (host_str(env::current_exe().unwrap()), host_str(&game));
         let params = InitParams { size: size_of::<InitParams>(), host_path: host_path.as_ptr(), dotnet_root: root.as_ptr() };
         let mut ctx = std::ptr::null_mut();
         check("hostfxr init", init(argv.len() as i32, argv.as_ptr(), &params, &mut ctx));
@@ -180,10 +194,10 @@ fn main() {
         let get_fn: GetFnPtr = std::mem::transmute(p);
 
         for dll in ["0Harmony.dll", "Oxidizer.Bridge.dll"] {
-            let path = wide(bridge.join(dll));
+            let path = host_str(bridge.join(dll));
             check(dll, load_assembly(path.as_ptr(), std::ptr::null_mut(), std::ptr::null_mut()));
         }
-        let (ty, method) = (wide("Oxidizer.Bridge, Oxidizer.Bridge"), wide("Init"));
+        let (ty, method) = (host_str("Oxidizer.Bridge, Oxidizer.Bridge"), host_str("Init"));
         check("get Bridge.Init", get_fn(ty.as_ptr(), method.as_ptr(), UNMANAGED_CALLERS_ONLY, std::ptr::null_mut(), std::ptr::null_mut(), &mut p));
         let bridge_init: BridgeInit = std::mem::transmute(p);
 
@@ -227,7 +241,7 @@ fn load_mods(api: &'static Api) {
             continue;
         }
         if let Some(dll) = section.get("dll").and_then(|v| v.as_str()) {
-            match unsafe { load_rust_mod(&dir.join(dll), api) } {
+            match unsafe { load_rust_mod(&mod_library(&dir, dll), api) } {
                 Ok(m) => {
                     log(&format!("loaded rust mod {id}"));
                     ui::set_status(&id, "Rust", None);
@@ -245,6 +259,17 @@ fn load_mods(api: &'static Api) {
     }
     let _ = RUST_MODS.set(rust);
     script::load(scripts);
+}
+
+/// `dll` as written if that file exists, otherwise this platform's library file for its stem,
+/// so `dll = "my_mod"` (or "my_mod.dll") finds `my_mod.dll` on Windows and `libmy_mod.so` on Linux.
+fn mod_library(dir: &Path, dll: &str) -> PathBuf {
+    let exact = dir.join(dll);
+    if exact.exists() {
+        return exact;
+    }
+    let stem = Path::new(dll).file_stem().unwrap_or(dll.as_ref());
+    dir.join(libloading::library_filename(stem))
 }
 
 fn disabled_mods(manifest: &Path) -> Vec<String> {
