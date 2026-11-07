@@ -1,6 +1,6 @@
 # Push a tag like v0.1.0 to build and publish a GitHub release.
-# Oxidizer-<tag>.zip is the Windows build (and the default archive for the content index),
-# Oxidizer-<tag>-linux.zip the Linux build.
+# Oxidizer-<tag>.zip holds both platforms (the content index requires every launch file in it),
+# Oxidizer-<tag>-windows.zip and Oxidizer-<tag>-linux.zip are the smaller per-platform downloads.
 name: release
 
 on:
@@ -19,7 +19,7 @@ jobs:
       matrix:
         include:
           - os: windows-latest
-            suffix: ""
+            suffix: "-windows"
             exe: oxidizer.exe
             modlib: hello_rust.dll
           - os: ubuntu-latest
@@ -53,7 +53,7 @@ jobs:
       - name: Zip (Windows)
         if: runner.os == 'Windows'
         shell: pwsh
-        run: Compress-Archive dist/Oxidizer "Oxidizer-${{ github.ref_name }}.zip"
+        run: Compress-Archive dist/Oxidizer "Oxidizer-${{ github.ref_name }}${{ matrix.suffix }}.zip"
 
       - name: Zip (Linux, keeps the executable bit)
         if: runner.os == 'Linux'
@@ -66,13 +66,13 @@ jobs:
 
   release:
     needs: build
-    if: startsWith(github.ref, 'refs/tags/')
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
 
       # Release notes are the tag's section of CHANGELOG.md; no section, no release.
       - name: Release notes
+        if: startsWith(github.ref, 'refs/tags/')
         shell: pwsh
         run: |
           $v = "${{ github.ref_name }}".TrimStart('v')
@@ -86,7 +86,23 @@ jobs:
         with:
           merge-multiple: true
 
+      # Both platform zips unpacked into one Oxidizer/ folder; unzip keeps the Linux executable bit.
+      - name: Combined zip
+        run: |
+          mkdir both
+          unzip -q "Oxidizer-${{ github.ref_name }}-windows.zip" -d both
+          unzip -qo "Oxidizer-${{ github.ref_name }}-linux.zip" -d both
+          cd both && zip -qr "../Oxidizer-${{ github.ref_name }}.zip" Oxidizer
+
+      - name: Combined zip (manual run)
+        if: "!startsWith(github.ref, 'refs/tags/')"
+        uses: actions/upload-artifact@v4
+        with:
+          name: zip-combined
+          path: Oxidizer-${{ github.ref_name }}.zip
+
       - name: Release
+        if: startsWith(github.ref, 'refs/tags/')
         env:
           GH_TOKEN: ${{ github.token }}
         run: gh release create "${{ github.ref_name }}" Oxidizer-*.zip --title "Oxidizer ${{ github.ref_name }}" --notes-file notes.md

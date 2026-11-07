@@ -5,6 +5,19 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ## [Unreleased]
 
+### Added
+
+- Typed Rust bindings: `oxidizer --bindgen ksa.rs` writes a Rust module with a type for every public `KSA.dll` type and methods for its public methods, properties, fields and constructors, plus constants for enums. Calls go by exact metadata token, so overloads are no longer guessed, and the file refuses to run against a different game build.
+- Hooks can read and replace the hooked method's return value: `result()` / `set_result(v)` in Rhai, `hook_result()` / `set_hook_result(&v)` in Rust.
+- Hotkeys: `key_pressed(name)` and `key_down(name)`, using the game's key names. Keys typed into text fields, the console or a dialog don't count.
+- Settings: `config_get(key, default)` / `config_set(key, value)` in Rhai, saved to `<documents>/oxidizer/<mod>.toml`; `config_path(mod_id)` for Rust mods.
+- `Obj::i64()`, and `Obj::from` for `i64` and `bool`.
+
+### Changed
+
+- API version 2. Mods built for API version 1 keep working; mods built for version 2 need this Oxidizer or newer.
+- Releases have `Oxidizer-<version>-windows.zip` and `Oxidizer-<version>-linux.zip`, and `Oxidizer-<version>.zip` with both, which mod managers use.
+
 ## [0.3.0] - 2026-11-07
 
 ### Added

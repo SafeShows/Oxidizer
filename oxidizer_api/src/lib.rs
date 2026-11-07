@@ -10,11 +10,13 @@
 use std::fmt;
 use std::sync::OnceLock;
 
+pub mod bind;
 pub mod imgui;
 
-/// ABI version of [`Api`] and the mod exports. Bump on any layout/signature change;
-/// the loader refuses mods built against a different version.
-pub const API_VERSION: u32 = 1;
+/// ABI version of [`Api`] and the mod exports. Bump when the table grows or changes;
+/// the loader runs mods built for its version or an older one, and refuses newer ones.
+/// Version 2 added hook results, keys, typed-binding calls and 64-bit integers.
+pub const API_VERSION: u32 = 2;
 
 /// .NET GCHandle. 0 = null.
 pub type Handle = usize;
@@ -42,6 +44,24 @@ pub struct Api {
     /// (type, method, postfix?, callback, user) -> ok
     pub patch: extern "C" fn(*const u8, usize, *const u8, usize, u8, HookFn, usize) -> u8,
     pub docs_path: extern "C" fn(*mut u8, usize) -> usize,
+    // ---- API version 2 ----
+    /// Return value of the hooked method (inside a hook only), else 0.
+    pub result_get: extern "C" fn() -> Handle,
+    /// Replace the hooked method's return value (inside a hook only).
+    pub result_set: extern "C" fn(Handle) -> u8,
+    /// Key (game key name such as "F5") pressed this frame.
+    pub key_pressed: extern "C" fn(*const u8, usize) -> u8,
+    /// Key held down.
+    pub key_down: extern "C" fn(*const u8, usize) -> u8,
+    /// Call a KSA.dll method/constructor by metadata token: (obj or 0 for static, token, args, n) -> result.
+    pub invoke: extern "C" fn(Handle, i32, *const Handle, usize) -> Handle,
+    /// Read a KSA.dll field by metadata token.
+    pub field_get: extern "C" fn(Handle, i32) -> Handle,
+    pub field_set: extern "C" fn(Handle, i32, Handle) -> u8,
+    /// The installed KSA.dll build (module version id).
+    pub ksa_version: extern "C" fn(*mut u8, usize) -> usize,
+    pub as_i64: extern "C" fn(Handle, *mut i64) -> u8,
+    pub box_i64: extern "C" fn(i64) -> Handle,
 }
 
 static API: OnceLock<&'static Api> = OnceLock::new();
@@ -123,6 +143,12 @@ impl Obj {
         Obj((api().call)(h, ty.as_ptr(), ty.len(), method.as_ptr(), method.len(), hs.as_ptr(), hs.len()))
     }
 
+    /// Integer/enum value as i64 (exact, unlike [`Obj::f64`] for large numbers).
+    pub fn i64(&self) -> Option<i64> {
+        let mut v = 0;
+        ((api().as_i64)(self.0, &mut v) != 0).then_some(v)
+    }
+
     /// Numeric/bool/enum value as f64.
     pub fn f64(&self) -> Option<f64> {
         let mut v = 0.0;
@@ -159,6 +185,18 @@ impl From<f64> for Obj {
     }
 }
 
+impl From<i64> for Obj {
+    fn from(v: i64) -> Obj {
+        Obj((api().box_i64)(v))
+    }
+}
+
+impl From<bool> for Obj {
+    fn from(v: bool) -> Obj {
+        Obj((api().box_f64)(v as u8 as f64))
+    }
+}
+
 impl From<&str> for Obj {
     fn from(s: &str) -> Obj {
         Obj((api().box_str)(s.as_ptr(), s.len()))
@@ -178,6 +216,37 @@ pub fn hook(ty: &str, method: &str, postfix: bool, f: fn(&Obj, &Obj) -> bool) ->
         std::panic::catch_unwind(|| f(&inst, &args)).unwrap_or(true) as u8
     }
     patch(ty, method, postfix, tramp, f as usize)
+}
+
+/// Inside a hook: the hooked method's return value (null for void methods or outside a hook).
+/// In a prefix it is the default until something sets it.
+pub fn hook_result() -> Obj {
+    Obj((api().result_get)())
+}
+
+/// Inside a hook: replace the hooked method's return value (converted to its return type).
+/// From a prefix, combine with returning `false` to skip the original and return this value.
+pub fn set_hook_result(value: &Obj) -> bool {
+    (api().result_set)(value.0) != 0
+}
+
+/// True on the frame `key` was pressed. Key names are the game's (GLFW) names, e.g. "F5", "K", "Space".
+/// Keys typed into text fields or the console don't count.
+pub fn key_pressed(key: &str) -> bool {
+    (api().key_pressed)(key.as_ptr(), key.len()) != 0
+}
+
+/// True while `key` is held down.
+pub fn key_down(key: &str) -> bool {
+    (api().key_down)(key.as_ptr(), key.len()) != 0
+}
+
+/// Where a mod keeps its settings: `<game documents>/oxidizer/<mod_id>.toml` (its folder is created).
+/// It lives outside the mod folder so updating the mod doesn't lose it; read and write it with your own TOML code.
+pub fn config_path(mod_id: &str) -> std::path::PathBuf {
+    let dir = std::path::PathBuf::from(read_string(|b, c| (api().docs_path)(b, c))).join("oxidizer");
+    let _ = std::fs::create_dir_all(&dir);
+    dir.join(format!("{mod_id}.toml"))
 }
 
 /// Implement and register with [`oxidizer_mod!`].

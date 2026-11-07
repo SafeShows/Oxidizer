@@ -13,7 +13,7 @@ In game, **Mods > Oxidizer** in the menu bar opens a window that lists the loade
 
 ## Install
 
-1. Download `Oxidizer-vX.Y.Z.zip` (Windows) or `Oxidizer-vX.Y.Z-linux.zip` (Linux) from [Releases](https://github.com/SafeShows/Oxidizer/releases) and unzip it anywhere.
+1. Download `Oxidizer-vX.Y.Z-windows.zip` or `Oxidizer-vX.Y.Z-linux.zip` from [Releases](https://github.com/SafeShows/Oxidizer/releases) (`Oxidizer-vX.Y.Z.zip` has both) and unzip it anywhere.
 2. Run `oxidizer.exe` (Linux: `./oxidizer`). If KSA isn't installed at the default path, set `game_path` in the `oxidizer.toml` it creates next to the exe. On Linux there is no default, so set it on the first run.
 3. To try the examples, copy the folders from `example-mods/` into `Documents/My Games/Kitten Space Agency/mods/`.
 
@@ -31,6 +31,8 @@ target/release/oxidizer.exe [--game "<KSA folder>"] [-InstancePath "<folder>"] [
 ```
 
 On first run without `--game`, the loader creates `oxidizer.toml` next to the exe (`game_path = '...'`). On Windows it defaults to `C:\Program Files\Ahwoo\Games\Kitten Space Agency`; on Linux, set it yourself.
+
+`oxidizer --bindgen ksa.rs` writes typed Rust bindings for the installed game instead of starting it (see [Typed bindings](#typed-bindings)).
 
 `-InstancePath`, or the `OXIDIZER_INSTANCE_PATH` environment variable, makes the game use that folder instead of `Documents/My Games/Kitten Space Agency` for mods, saves and settings. Mod managers such as Borea use it for separate game profiles.
 
@@ -73,6 +75,32 @@ impl Mod for M {
 oxidizer_api::oxidizer_mod!(M);
 ```
 
+Also in `oxidizer_api`:
+- `hook(type, method, postfix, fn)` patches a game method; inside the hook, `hook_result()` / `set_hook_result(&v)` read and replace its return value (from a prefix, return `false` as well to skip the original).
+- `key_pressed("F5")` is true on the frame a key was pressed, `key_down("F5")` while it's held. Names are the game's key names (`"K"`, `"F5"`, `"Space"`, `"LeftShift"`, ...). Keys typed into text fields or the console, or eaten by a dialog, don't count.
+- `config_path("my_mod")` is where to keep your settings: `<documents>/oxidizer/my_mod.toml`, outside the mod folder so updating the mod doesn't lose them.
+
+#### Typed bindings
+
+Instead of member names in strings, Rust mods can use generated types with autocomplete and compile-time checks:
+
+```sh
+oxidizer --bindgen src/ksa.rs     # once, and again after each game update
+```
+
+```rust
+mod ksa; // the generated file: a module per namespace, a struct per public KSA.dll type
+use ksa::ksa::{Program, Universe};
+
+let v = Program::controlled_vehicle();          // -> ksa::ksa::Vehicle
+if !v.is_null() {
+    oxidizer_api::log(&format!("{} at {:.0} s", v.id(), Universe::get_elapsed_seconds()));
+}
+Universe::set_simulation_speed_2(5.0, true);   // overloads get _2, _3, ... suffixes
+```
+
+Each wrapper derefs to its base class and finally to `Obj`, so inherited members and the by-name API work on it too. Members are called by their exact metadata token, so there's no overload guessing. The file only works with the game build it was generated from: against another build, every call does nothing after one log message telling you to regenerate it. Only public members are generated; use the by-name API for the rest.
+
 ### Rhai
 
 A script can define `init()`, `frame(t, dt)`, `gui(dt)`, `menu()` (entries in the game's Mods menu) and `unload()`. Keep state in `this` (an object map).
@@ -85,12 +113,16 @@ Scripts reload while the game runs: save the file and the new code takes over wi
 | Patching | `patch(type, method, "prefix"\|"postfix", "fn_name")`. The callback is `fn_name(instance, args)`; returning `false` from a prefix skips the original method. |
 | ImGui | `begin(title)` / `end()`, `text`, `button`, `checkbox(label, v) -> v`, `slider(label, v, min, max) -> v`, `same_line`, `separator`, `header` |
 | Menu (in `menu()`) | `menu_item(label[, checked]) -> clicked`, `begin_menu(label)` / `end_menu()` for a submenu |
+| Return values (in a hook) | `result()`, `set_result(v)`: read or replace the hooked method's return value |
+| Keys | `key_pressed(name)` (this frame), `key_down(name)` (held), e.g. `key_pressed("F5")` |
+| Settings | `config_get(key, default)`, `config_set(key, value)` for bools, numbers and strings, saved to `<documents>/oxidizer/<mod>.toml` |
 | Logging | `print(...)` |
 
 ## Notes and limits
 
 - Members are looked up by name through reflection. Type names can be assembly-qualified (`"KSA.Universe, KSA"`), which works even before the game has loaded that type.
 - `call` picks the first overload with a matching argument count and converts arguments to the parameter types.
-- Patching uses the first overload of the method. Hooks receive `__instance` and `__args`, but not `__result`.
+- Patching uses the first overload of the method. Hooks receive the instance and the arguments, and can read and replace the return value.
+- A Rhai hook doesn't run while another Rhai script is running (they share one script engine): if a script calls a method another script hooks, the call goes through unhooked. Calls from the game and from Rust mods are always hooked.
 - A Rhai script that throws an error stops until its file is saved again, so the same error isn't logged every frame. Errors from reflection calls are logged once each.
 - `ref struct` members (for example `ReadOnlySpan` properties such as `Program.VehiclesInFrame`) can't be read through reflection.

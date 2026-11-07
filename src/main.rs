@@ -2,6 +2,7 @@
 //! loads Rust (cdylib) and Rhai mods, then runs KSA's Main.
 //!
 //! Usage: oxidizer [--game <KSA dir>] [-InstancePath <dir>] [game args...]
+//!        oxidizer [--game <KSA dir>] --bindgen <file.rs>   (write typed Rust bindings for KSA.dll, don't start the game)
 //! Game dir can also be set in `oxidizer.toml` next to the exe: `game_path = '...'`.
 //! The instance (the folder used instead of Documents/My Games/Kitten Space Agency)
 //! can also come from the OXIDIZER_INSTANCE_PATH environment variable.
@@ -152,6 +153,14 @@ fn instance_path(args: &mut Vec<String>) -> String {
     env::var("OXIDIZER_INSTANCE_PATH").unwrap_or_default()
 }
 
+/// `--bindgen <file.rs>`: the (absolute) output file for typed bindings.
+fn bindgen_out(args: &mut Vec<String>) -> Option<PathBuf> {
+    let i = args.iter().position(|a| a == "--bindgen")?;
+    let v = args.get(i + 1).cloned().unwrap_or_else(|| fail("--bindgen needs an output file, e.g. --bindgen src/ksa.rs"));
+    args.drain(i..=i + 1);
+    Some(std::path::absolute(v).unwrap())
+}
+
 fn bridge_dir() -> PathBuf {
     let exe = env::current_exe().unwrap();
     let dir = exe.parent().unwrap();
@@ -163,6 +172,7 @@ fn bridge_dir() -> PathBuf {
 
 fn main() {
     let mut args: Vec<String> = env::args().skip(1).collect();
+    let bindgen = bindgen_out(&mut args);
     let game = game_dir(&mut args);
     let instance = instance_path(&mut args);
     let ksa_dll = game.join("KSA.dll");
@@ -197,6 +207,13 @@ fn main() {
             let path = host_str(bridge.join(dll));
             check(dll, load_assembly(path.as_ptr(), std::ptr::null_mut(), std::ptr::null_mut()));
         }
+        if let Some(out) = bindgen {
+            let (ty, method) = (host_str("Oxidizer.Bindgen, Oxidizer.Bridge"), host_str("Run"));
+            check("get Bindgen.Run", get_fn(ty.as_ptr(), method.as_ptr(), UNMANAGED_CALLERS_ONLY, std::ptr::null_mut(), std::ptr::null_mut(), &mut p));
+            let run: unsafe extern "C" fn(*const u8, usize) -> i32 = std::mem::transmute(p);
+            let out = out.to_string_lossy();
+            std::process::exit(if run(out.as_ptr(), out.len()) == 1 { 0 } else { 1 });
+        }
         let (ty, method) = (host_str("Oxidizer.Bridge, Oxidizer.Bridge"), host_str("Init"));
         check("get Bridge.Init", get_fn(ty.as_ptr(), method.as_ptr(), UNMANAGED_CALLERS_ONLY, std::ptr::null_mut(), std::ptr::null_mut(), &mut p));
         let bridge_init: BridgeInit = std::mem::transmute(p);
@@ -217,6 +234,7 @@ fn main() {
             m.unload.map(|f| f());
         }
         script::call_all("unload", ());
+        script::save_settings();
         std::process::exit(rc);
     }
 }
@@ -284,8 +302,9 @@ unsafe fn load_rust_mod(path: &Path, api: &'static Api) -> Result<RustMod, Box<d
     unsafe {
         let lib = Library::new(path)?;
         let version: extern "C" fn() -> u32 = *lib.get(b"oxidizer_api_version\0")?;
-        if version() != oxidizer_api::API_VERSION {
-            return Err(format!("built for API v{}, loader is v{}; rebuild the mod", version(), oxidizer_api::API_VERSION).into());
+        // Older mods only use the start of the table, which never changes; newer ones need a newer loader.
+        if version() == 0 || version() > oxidizer_api::API_VERSION {
+            return Err(format!("built for API v{}, this Oxidizer supports up to v{}; update Oxidizer", version(), oxidizer_api::API_VERSION).into());
         }
         let init: extern "C" fn(&'static Api) = *lib.get(b"oxidizer_init\0")?;
         let m = RustMod {

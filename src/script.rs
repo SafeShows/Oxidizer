@@ -5,7 +5,7 @@
 
 use crate::{log, ui};
 use oxidizer_api::{Handle, Obj, imgui};
-use rhai::{Array, CallFnOptions, Dynamic, Engine, FuncArgs, Map, Scope, AST};
+use rhai::{Array, CallFnOptions, Dynamic, Engine, EvalAltResult, FuncArgs, Map, Scope, AST};
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicUsize, Ordering};
@@ -43,6 +43,15 @@ struct Scripts {
 }
 
 static SCRIPTS: Mutex<Option<Scripts>> = Mutex::new(None);
+
+/// Saved settings of each script (same index as `Scripts::mods`), written at most once a second.
+struct Config {
+    path: PathBuf,
+    table: toml::Table,
+    dirty: bool,
+}
+
+static CONFIGS: Mutex<Vec<Config>> = Mutex::new(Vec::new());
 /// Index of the script currently running, so `patch()` knows who registered a hook.
 static CURRENT: AtomicUsize = AtomicUsize::new(0);
 
@@ -68,7 +77,7 @@ pub fn load(list: Vec<(String, PathBuf)>) {
         return;
     }
     let engine = engine();
-    let mods = list
+    let mods: Vec<Script> = list
         .into_iter()
         .map(|(name, path)| {
             let modified = modified(&path);
@@ -84,6 +93,14 @@ pub fn load(list: Vec<(String, PathBuf)>) {
                 }
             };
             Script { name, path, modified, ast, scope, this: Map::new().into(), dead, started: false }
+        })
+        .collect();
+    *CONFIGS.lock().unwrap() = mods
+        .iter()
+        .map(|m: &Script| {
+            let path = oxidizer_api::config_path(&m.name);
+            let table = fs::read_to_string(&path).ok().and_then(|t| t.parse().ok()).unwrap_or_default();
+            Config { path, table, dirty: false }
         })
         .collect();
     let mut g = SCRIPTS.lock().unwrap();
@@ -117,6 +134,7 @@ pub fn reload_changed() {
         }
         *last = Some(Instant::now());
     }
+    save_settings();
     let Ok(mut g) = SCRIPTS.try_lock() else { return };
     let Some(s) = g.as_mut() else { return };
     for i in 0..s.mods.len() {
@@ -168,6 +186,49 @@ fn call(s: &mut Scripts, i: usize, f: &str, args: impl FuncArgs) -> Option<Dynam
             None
         }
     }
+}
+
+/// Write settings that changed since the last save.
+pub fn save_settings() {
+    for c in CONFIGS.lock().unwrap_or_else(|e| e.into_inner()).iter_mut().filter(|c| c.dirty) {
+        c.dirty = false;
+        if let Err(e) = fs::write(&c.path, c.table.to_string()) {
+            log(&format!("saving {}: {e}", c.path.display()));
+        }
+    }
+}
+
+fn config_get(key: &str, default: Dynamic) -> Dynamic {
+    let configs = CONFIGS.lock().unwrap_or_else(|e| e.into_inner());
+    match configs.get(CURRENT.load(Ordering::Relaxed)).and_then(|c| c.table.get(key)) {
+        Some(toml::Value::String(v)) => v.clone().into(),
+        Some(toml::Value::Integer(v)) => (*v).into(),
+        Some(toml::Value::Float(v)) => (*v).into(),
+        Some(toml::Value::Boolean(v)) => (*v).into(),
+        _ => default,
+    }
+}
+
+fn config_set(key: &str, v: Dynamic) -> Result<(), Box<EvalAltResult>> {
+    let value = if let Ok(b) = v.as_bool() {
+        toml::Value::Boolean(b)
+    } else if let Ok(i) = v.as_int() {
+        toml::Value::Integer(i)
+    } else if let Ok(f) = v.as_float() {
+        toml::Value::Float(f)
+    } else if v.is_string() {
+        toml::Value::String(v.into_string()?)
+    } else {
+        return Err(format!("config_set: '{key}' must be a bool, number or string").into());
+    };
+    let mut configs = CONFIGS.lock().unwrap_or_else(|e| e.into_inner());
+    if let Some(c) = configs.get_mut(CURRENT.load(Ordering::Relaxed)) {
+        if c.table.get(key) != Some(&value) {
+            c.table.insert(key.into(), value);
+            c.dirty = true;
+        }
+    }
+    Ok(())
 }
 
 extern "C" fn hook_tramp(user: usize, inst: Handle, args: Handle) -> u8 {
@@ -236,6 +297,17 @@ fn engine() -> Engine {
         let user = Box::leak(Box::new((CURRENT.load(Ordering::Relaxed), f.to_string()))) as *const _ as usize;
         oxidizer_api::patch(ty, m, kind == "postfix", hook_tramp, user)
     });
+
+    // inside a hook: the hooked method's return value; set_result replaces it
+    e.register_fn("result", || RObj::new(oxidizer_api::hook_result()))
+        .register_fn("set_result", |v: Dynamic| oxidizer_api::set_hook_result(&to_obj(&v)));
+
+    // keys, by the game's key names ("F5", "K", "Space"); pressed = this frame only
+    e.register_fn("key_pressed", |k: &str| oxidizer_api::key_pressed(k))
+        .register_fn("key_down", |k: &str| oxidizer_api::key_down(k));
+
+    // settings saved per mod in <documents>/oxidizer/<mod>.toml: bools, numbers and strings
+    e.register_fn("config_get", config_get).register_fn("config_set", config_set);
 
     // imgui (only inside gui())
     e.register_fn("begin", |t: &str| imgui::begin(t))
