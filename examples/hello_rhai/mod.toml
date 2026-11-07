@@ -1,0 +1,4 @@
+name = "hello_rhai"
+
+[oxidizer]
+script = "main.rhai"

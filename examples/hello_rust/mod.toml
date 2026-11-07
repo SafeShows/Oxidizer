@@ -1,0 +1,4 @@
+name = "hello_rust"
+
+[oxidizer]
+dll = "hello_rust.dll"
