@@ -1,6 +1,7 @@
 # Push a tag like v0.1.0 to build and publish a GitHub release.
-# Oxidizer-<tag>.zip holds both platforms (the content index requires every launch file in it),
-# Oxidizer-<tag>-windows.zip and Oxidizer-<tag>-linux.zip are the smaller per-platform downloads.
+# The release has one zip, Oxidizer-<tag>.zip, with the Windows and the Linux build side by side.
+# One zip on purpose: the content index wants every launch file (oxidizer.exe and oxidizer) in the
+# main archive, and in any <stem>-<platform>.zip as well, so per-platform zips would only be copies.
 name: release
 
 on:
@@ -105,4 +106,4 @@ jobs:
         if: startsWith(github.ref, 'refs/tags/')
         env:
           GH_TOKEN: ${{ github.token }}
-        run: gh release create "${{ github.ref_name }}" Oxidizer-*.zip --title "Oxidizer ${{ github.ref_name }}" --notes-file notes.md
+        run: gh release create "${{ github.ref_name }}" "Oxidizer-${{ github.ref_name }}.zip" --title "Oxidizer ${{ github.ref_name }}" --notes-file notes.md

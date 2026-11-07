@@ -20,7 +20,7 @@ Rust mods: the new API is in `oxidizer_api` 0.3.0.
 ### Changed
 
 - API version 2. Mods built for API version 1 keep working; mods built for version 2 need this Oxidizer or newer.
-- Releases have `Oxidizer-<version>-windows.zip` and `Oxidizer-<version>-linux.zip`, and `Oxidizer-<version>.zip` with both, which mod managers use.
+- Releases have one zip, `Oxidizer-<version>.zip`, with the Windows and the Linux build. (0.4.0 was first published with separate Windows and Linux zips too; those were removed because the content index can't use them.)
 
 ## [0.3.0] - 2026-11-07
 

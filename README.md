@@ -13,7 +13,7 @@ In game, **Mods > Oxidizer** in the menu bar opens a window that lists the loade
 
 ## Install
 
-1. Download `Oxidizer-vX.Y.Z-windows.zip` or `Oxidizer-vX.Y.Z-linux.zip` from [Releases](https://github.com/SafeShows/Oxidizer/releases) (`Oxidizer-vX.Y.Z.zip` has both) and unzip it anywhere.
+1. Download `Oxidizer-vX.Y.Z.zip` from [Releases](https://github.com/SafeShows/Oxidizer/releases) and unzip it anywhere. It has both the Windows and the Linux build.
 2. Run `oxidizer.exe` (Linux: `./oxidizer`). If KSA isn't installed at the default path, set `game_path` in the `oxidizer.toml` it creates next to the exe. On Linux there is no default, so set it on the first run.
 3. To try the examples, copy the folders from `example-mods/` into `Documents/My Games/Kitten Space Agency/mods/`.
 
