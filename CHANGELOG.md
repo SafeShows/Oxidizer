@@ -5,9 +5,11 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ## [Unreleased]
 
+## [0.5.1] - 2026-11-07
+
 ### Added
 
-- macOS (Apple Silicon) builds, for the [macOS port](https://github.com/renancamm/ksa-macos-port) of the game: `liboxidizer_core.dylib` in the StarMap mod and `oxidizer-macos` in the standalone zip. Not tested on a Mac yet.
+- macOS (Apple Silicon), with the [macOS port](https://github.com/renancamm/ksa-macos-port) of the game: the StarMap mod has `liboxidizer_core.dylib`, and works with the port's StarMap (tested on an M3 Pro with macOS 27: Rhai and Rust mods, hooks and hot reload). The standalone zip has `oxidizer-macos`, which needs the port's launcher to start it and isn't tested yet.
 - Standalone Oxidizer finds .NET through `DOTNET_ROOT`, or in the app bundle's `Contents/MacOS`, when the game folder has no `hostfxr` of its own (the macOS port uses Microsoft's shared runtime).
 
 ## [0.5.0] - 2026-11-07
@@ -90,7 +92,8 @@ First release.
 - When a method has several overloads, `call` and patching use the first one with a matching number of arguments.
 - Hooks can't read or change a patched method's return value.
 
-[Unreleased]: https://github.com/SafeShows/Oxidizer/compare/v0.5.0...HEAD
+[Unreleased]: https://github.com/SafeShows/Oxidizer/compare/v0.5.1...HEAD
+[0.5.1]: https://github.com/SafeShows/Oxidizer/compare/v0.5.0...v0.5.1
 [0.5.0]: https://github.com/SafeShows/Oxidizer/compare/v0.4.0...v0.5.0
 [0.4.0]: https://github.com/SafeShows/Oxidizer/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/SafeShows/Oxidizer/compare/v0.2.0...v0.3.0

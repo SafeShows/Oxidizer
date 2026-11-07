@@ -1,6 +1,6 @@
 # Oxidizer
 
-A mod loader for Kitten Space Agency, written in Rust. Mods can be written in Rust (cdylib) or as Rhai scripts. Runs on Windows and Linux, on its own or as a [StarMap](https://github.com/StarMapLoader/StarMap) mod next to C# mods.
+A mod loader for Kitten Space Agency, written in Rust. Mods can be written in Rust (cdylib) or as Rhai scripts. Runs on Windows, Linux and macOS (Apple Silicon, with the [macOS port](https://github.com/renancamm/ksa-macos-port)), on its own or as a [StarMap](https://github.com/StarMapLoader/StarMap) mod next to C# mods.
 
 ![The two example mods, one in Rhai and one in Rust, drawing ImGui windows in game](docs/screenshot.png)
 
@@ -12,9 +12,11 @@ In game, **Mods > Oxidizer** in the menu bar opens a window that lists the loade
 
 ## Install
 
-The [releases](https://github.com/SafeShows/Oxidizer/releases) have two zips, each with the Windows and the Linux build.
+The [releases](https://github.com/SafeShows/Oxidizer/releases) have two zips, each with the Windows, Linux and macOS builds.
 
 **As a StarMap mod:** unzip `Oxidizer.StarMap-X.Y.Z.zip` into `Documents/My Games/Kitten Space Agency/mods/` (so there is a `mods/Oxidizer.StarMap/` folder) and start the game through StarMap as usual.
+
+**On a Mac:** set up the [macOS port](https://github.com/renancamm/ksa-macos-port) with its StarMap (`./starmap.sh`), then install the StarMap mod as above. If you downloaded the zip in a browser, clear the quarantine flag or macOS won't load the libraries: `xattr -dr com.apple.quarantine ~/Documents/My\ Games/Kitten\ Space\ Agency/mods`.
 
 **Standalone:**
 1. Unzip `Oxidizer-X.Y.Z.zip` anywhere.
