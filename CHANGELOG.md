@@ -5,6 +5,10 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ## [Unreleased]
 
+### Changed
+
+- The bridge is built against `StarMap.API` 0.5.2 (compile-only, as before). Tested with StarMap 0.5.2: Oxidizer's **Mods** menu merges with StarMap 0.5's built-in one, so players see a single menu with both C# and Oxidizer entries.
+
 ## [0.5.1] - 2026-11-07
 
 ### Added
