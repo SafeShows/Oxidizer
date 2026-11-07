@@ -1,0 +1,39 @@
+# Push a tag like v0.1.0 to build and publish a GitHub release.
+name: release
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.0.x
+
+      - name: Build
+        run: |
+          dotnet build bridge -c Release -o target/bridge
+          cargo build --release --workspace
+
+      - name: Package
+        shell: pwsh
+        run: |
+          $d = "dist/Oxidizer"
+          New-Item -ItemType Directory -Force "$d/bridge", "$d/example-mods/hello_rust", "$d/example-mods/hello_rhai" | Out-Null
+          Copy-Item target/release/oxidizer.exe, README.md, LICENSE $d
+          Copy-Item target/bridge/0Harmony.dll, target/bridge/Oxidizer.Bridge.dll "$d/bridge"
+          Copy-Item examples/hello_rust/mod.toml, target/release/hello_rust.dll "$d/example-mods/hello_rust"
+          Copy-Item examples/hello_rhai/* "$d/example-mods/hello_rhai"
+          Compress-Archive "$d" "Oxidizer-${{ github.ref_name }}.zip"
+
+      - name: Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release create "${{ github.ref_name }}" "Oxidizer-${{ github.ref_name }}.zip" --title "Oxidizer ${{ github.ref_name }}" --generate-notes

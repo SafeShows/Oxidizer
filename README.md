@@ -7,6 +7,12 @@ KSA is a .NET 10 game, so the loader:
 2. injects `bridge/` (a small C# DLL plus Harmony), which hooks `Program.OnFrame` and `Program.OnDrawUiViewports` and gives mods reflection access to game objects,
 3. loads the mods, then runs the game's `Main`.
 
+## Install
+
+1. Download `Oxidizer-vX.Y.Z.zip` from [Releases](https://github.com/SafeShows/Oxidizer/releases) and unzip it anywhere.
+2. Run `oxidizer.exe`. If KSA isn't installed at the default path, set `game_path` in the `oxidizer.toml` it creates next to the exe.
+3. To try the examples, copy the folders from `example-mods/` into `Documents/My Games/Kitten Space Agency/mods/`.
+
 ## Build
 
 ```sh
