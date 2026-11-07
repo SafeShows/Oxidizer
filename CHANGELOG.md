@@ -5,7 +5,16 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ## [Unreleased]
 
+### Added
+
+- Typed game access for Rhai, built from the installed game at startup: `ksa::Program::controlled_vehicle()`, `vehicle.id`, `vehicle.set_throttle(0.5)`, `ksa::SimSpeed::Fast`. Numbers, bools and strings come back as Rhai values. Takes about 0.4 s at startup for the whole game (about 32,000 functions).
+- Rhai definition files for editors, written to `<documents>/oxidizer/definitions/` on each new game version, so editors with Rhai support can autocomplete the game and Oxidizer's functions.
+- Overloads can be named with their parameter types in `static_call`, `call` and `patch`: `"SetSimulationSpeed(double, bool)"`. Without them, the overload whose parameter types match the arguments is picked, and errors list the overloads.
+
 ### Changed
+
+- Rhai scripts no longer block each other: a script calling a method that another script hooks now runs that hook (before, it was skipped). Only a script hooking a method it calls itself is still skipped while it runs.
+- Patching finds private methods of base classes too.
 
 - The bridge is built against `StarMap.API` 0.5.2 (compile-only, as before). Tested with StarMap 0.5.2: Oxidizer's **Mods** menu merges with StarMap 0.5's built-in one, so players see a single menu with both C# and Oxidizer entries.
 

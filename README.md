@@ -128,12 +128,23 @@ Each wrapper derefs to its base class and finally to `Obj`, so inherited members
 
 A script can define `init()`, `frame(t, dt)`, `gui(dt)`, `menu()` (entries in the game's Mods menu) and `unload()`. Keep state in `this` (an object map).
 
+The game is available as typed modules, built from the installed game when Oxidizer starts, so they always match your game version:
+
+```rhai
+let v = ksa::Program::controlled_vehicle();          // static members: a module per namespace and type
+print(`${v.id} at ${ksa::Universe::get_elapsed_seconds()} s`);  // instance properties: v.id, v.throttle = 0.5
+v.set_enum(ksa::VehicleEngine::Ignite);              // instance methods; enum values are integer constants
+```
+
+Numbers, bools and strings come back as Rhai values; other game objects as `Obj`. Names are the game's in snake_case. Static methods with the same name and number of arguments get `_2`, `_3`, ... suffixes. On every new game version, Oxidizer writes definition files describing all of it (and its own functions) to `<documents>/oxidizer/definitions/`, so editors with Rhai language support can autocomplete: add that folder to your editor's workspace.
+
 Scripts reload while the game runs: save the file and the new code takes over within a second. `this` is kept, `init()` doesn't run again, and `reload()` runs if the script defines it. If the new version doesn't compile, the old one keeps running and the error shows in the Oxidizer window.
 
 | Area | Functions |
 |---|---|
-| Game objects | `static_get(type, member)`, `static_set(type, member, v)`, `static_call(type, method[, args])`, `obj.get(m)`, `obj.set(m, v)`, `obj.call(m[, args])`, `obj.float()`, `obj.is_null()`, `obj.len()`, `obj[i]`, `obj.to_string()` |
+| Game objects | typed: `ksa::...` (above); by name: `static_get(type, member)`, `static_set(type, member, v)`, `static_call(type, method[, args])`, `obj.get(m)`, `obj.set(m, v)`, `obj.call(m[, args])`, `obj.float()`, `obj.is_null()`, `obj.len()`, `obj[i]`, `obj.to_string()` |
 | Patching | `patch(type, method, "prefix"\|"postfix", "fn_name")`. The callback is `fn_name(instance, args)`; returning `false` from a prefix skips the original method. |
+| Overloads | in `static_call`, `call` and `patch`, name the exact one with its parameter types: `"SetSimulationSpeed(double, bool)"` |
 | ImGui | `begin(title)` / `end()`, `text`, `button`, `checkbox(label, v) -> v`, `slider(label, v, min, max) -> v`, `same_line`, `separator`, `header` |
 | Menu (in `menu()`) | `menu_item(label[, checked]) -> clicked`, `begin_menu(label)` / `end_menu()` for a submenu |
 | Return values (in a hook) | `result()`, `set_result(v)`: read or replace the hooked method's return value |
@@ -144,8 +155,8 @@ Scripts reload while the game runs: save the file and the new code takes over wi
 ## Notes and limits
 
 - Members are looked up by name through reflection. Type names can be assembly-qualified (`"KSA.Universe, KSA"`), which works even before the game has loaded that type.
-- `call` picks the first overload with a matching argument count and converts arguments to the parameter types.
-- Patching uses the first overload of the method. Hooks receive the instance and the arguments, and can read and replace the return value.
-- A Rhai hook doesn't run while another Rhai script is running (they share one script engine): if a script calls a method another script hooks, the call goes through unhooked. Calls from the game and from Rust mods are always hooked.
+- Overloads: a method name can carry its parameter types, `"SetSimulationSpeed(double, bool)"` (C# keywords, short or full type names). Without them, a call picks the only overload with that many arguments, or the one whose parameter types match the arguments; a patch needs the name to be unambiguous. When it can't tell, the error lists the overloads.
+- Hooks receive the instance and the arguments, and can read and replace the return value.
+- A Rhai script's hook doesn't run while that same script is running further up (a script hooking a method it calls itself); the call goes through unhooked. Hooks from other scripts, and calls from the game and from Rust mods, always run.
 - A Rhai script that throws an error stops until its file is saved again, so the same error isn't logged every frame. Errors from reflection calls are logged once each.
 - `ref struct` members (for example `ReadOnlySpan` properties such as `Program.VehiclesInFrame`) can't be read through reflection.

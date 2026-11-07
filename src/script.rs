@@ -6,20 +6,20 @@
 use crate::{log, ui};
 use oxidizer_api::{Handle, Obj, imgui};
 use rhai::{Array, CallFnOptions, Dynamic, Engine, EvalAltResult, FuncArgs, Map, Scope, AST};
+use std::cell::Cell;
 use std::fs;
 use std::path::{Path, PathBuf};
-use std::sync::atomic::{AtomicUsize, Ordering};
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc, Mutex, MutexGuard, OnceLock, TryLockError};
 use std::time::{Duration, Instant, SystemTime};
 
 const KIND: &str = "Rhai";
 const RELOAD_CHECK: Duration = Duration::from_secs(1);
 
 #[derive(Clone)]
-struct RObj(Arc<Obj>);
+pub(crate) struct RObj(pub(crate) Arc<Obj>);
 
 impl RObj {
-    fn new(o: Obj) -> RObj {
+    pub(crate) fn new(o: Obj) -> RObj {
         RObj(Arc::new(o))
     }
 }
@@ -37,12 +37,29 @@ struct Script {
     started: bool,
 }
 
+/// The engine is only read after setup, so all scripts share it; each script has its own lock, so a script can
+/// call a game method that another script hooks while it runs.
 struct Scripts {
     engine: Engine,
-    mods: Vec<Script>,
+    mods: Vec<Mutex<Script>>,
 }
 
-static SCRIPTS: Mutex<Option<Scripts>> = Mutex::new(None);
+static SCRIPTS: OnceLock<Scripts> = OnceLock::new();
+
+thread_local! {
+    /// The script running on this thread, so `patch()` and `config_get()` know who calls them.
+    static CURRENT: Cell<usize> = const { Cell::new(0) };
+}
+
+/// A script's lock, or None when it is busy: running further up this thread (a hook it set on a method it
+/// called itself) or, briefly, on another thread. Busy scripts are skipped rather than waited for.
+fn lock(m: &Mutex<Script>) -> Option<MutexGuard<'_, Script>> {
+    match m.try_lock() {
+        Ok(g) => Some(g),
+        Err(TryLockError::Poisoned(p)) => Some(p.into_inner()),
+        Err(TryLockError::WouldBlock) => None,
+    }
+}
 
 /// Saved settings of each script (same index as `Scripts::mods`), written at most once a second.
 struct Config {
@@ -52,8 +69,6 @@ struct Config {
 }
 
 static CONFIGS: Mutex<Vec<Config>> = Mutex::new(Vec::new());
-/// Index of the script currently running, so `patch()` knows who registered a hook.
-static CURRENT: AtomicUsize = AtomicUsize::new(0);
 
 fn modified(path: &Path) -> Option<SystemTime> {
     fs::metadata(path).and_then(|m| m.modified()).ok()
@@ -76,7 +91,12 @@ pub fn load(list: Vec<(String, PathBuf)>) {
     if list.is_empty() {
         return;
     }
-    let engine = engine();
+    let started = Instant::now();
+    let mut engine = engine();
+    let count = crate::ksa_rhai::register(&mut engine);
+    log(&format!("typed game access for Rhai: {count} functions in {} ms", started.elapsed().as_millis()));
+    let docs = oxidizer_api::config_path("x").parent().map(Path::to_path_buf).unwrap_or_default();
+    crate::ksa_rhai::write_definitions(&engine, &docs.join("definitions"));
     let mods: Vec<Script> = list
         .into_iter()
         .map(|(name, path)| {
@@ -103,20 +123,20 @@ pub fn load(list: Vec<(String, PathBuf)>) {
             Config { path, table, dirty: false }
         })
         .collect();
-    let mut g = SCRIPTS.lock().unwrap();
-    let s = g.insert(Scripts { engine, mods });
-    for i in 0..s.mods.len() {
-        start(s, i);
+    let s = SCRIPTS.get_or_init(|| Scripts { engine, mods: mods.into_iter().map(Mutex::new).collect() });
+    for (i, m) in s.mods.iter().enumerate() {
+        if let Some(mut m) = lock(m) {
+            start(&s.engine, i, &mut m);
+        }
     }
 }
 
 /// Runs init() once per script.
-fn start(s: &mut Scripts, i: usize) {
-    if s.mods[i].dead {
+fn start(engine: &Engine, i: usize, m: &mut Script) {
+    if m.dead {
         return;
     }
-    call(s, i, "init", ());
-    let m = &mut s.mods[i];
+    call(engine, i, m, "init", ());
     m.started = !m.dead;
     if m.started {
         ui::set_status(&m.name, KIND, None);
@@ -135,49 +155,49 @@ pub fn reload_changed() {
         *last = Some(Instant::now());
     }
     save_settings();
-    let Ok(mut g) = SCRIPTS.try_lock() else { return };
-    let Some(s) = g.as_mut() else { return };
-    for i in 0..s.mods.len() {
-        let t = modified(&s.mods[i].path);
-        if t == s.mods[i].modified {
+    let Some(s) = SCRIPTS.get() else { return };
+    for (i, m) in s.mods.iter().enumerate() {
+        let Some(mut m) = lock(m) else { continue };
+        let t = modified(&m.path);
+        if t == m.modified {
             continue;
         }
-        s.mods[i].modified = t;
-        match compile(&s.engine, &s.mods[i].path) {
+        m.modified = t;
+        match compile(&s.engine, &m.path) {
             Ok((ast, scope)) => {
-                let m = &mut s.mods[i];
                 (m.ast, m.scope, m.dead) = (ast, scope, false);
                 log(&format!("reloaded script mod {}", m.name));
                 ui::set_status(&m.name, KIND, None);
                 if m.started {
-                    call(s, i, "reload", ());
+                    call(&s.engine, i, &mut m, "reload", ());
                 } else {
-                    start(s, i);
+                    start(&s.engine, i, &mut m);
                 }
             }
             // The previous version keeps running (unless it had stopped).
-            Err(e) => report(&s.mods[i].name.clone(), format!("reload failed: {e}")),
+            Err(e) => report(&m.name.clone(), format!("reload failed: {e}")),
         }
     }
 }
 
 pub fn call_all(f: &str, args: impl FuncArgs + Clone) {
-    // ponytail: skipped if a script is already running (re-entrant hook / other thread); per-mod locks if that bites.
-    let Ok(mut g) = SCRIPTS.try_lock() else { return };
-    let Some(s) = g.as_mut() else { return };
-    for i in 0..s.mods.len() {
-        call(s, i, f, args.clone());
+    let Some(s) = SCRIPTS.get() else { return };
+    for (i, m) in s.mods.iter().enumerate() {
+        if let Some(mut m) = lock(m) {
+            call(&s.engine, i, &mut m, f, args.clone());
+        }
     }
 }
 
-fn call(s: &mut Scripts, i: usize, f: &str, args: impl FuncArgs) -> Option<Dynamic> {
-    let m = &mut s.mods[i];
+fn call(engine: &Engine, i: usize, m: &mut Script, f: &str, args: impl FuncArgs) -> Option<Dynamic> {
     if m.dead || !m.ast.iter_functions().any(|x| x.name == f) {
         return None;
     }
-    CURRENT.store(i, Ordering::Relaxed);
+    let outer = CURRENT.replace(i); // calls nest when a script calls a method another script hooks
     let opts = CallFnOptions::new().eval_ast(false).bind_this_ptr(&mut m.this);
-    match s.engine.call_fn_with_options::<Dynamic>(opts, &mut m.scope, &m.ast, f, args) {
+    let result = engine.call_fn_with_options::<Dynamic>(opts, &mut m.scope, &m.ast, f, args);
+    CURRENT.set(outer);
+    match result {
         Ok(v) => Some(v),
         Err(e) => {
             // Errors in frame/gui would repeat every frame: stop the script until its file changes.
@@ -200,7 +220,7 @@ pub fn save_settings() {
 
 fn config_get(key: &str, default: Dynamic) -> Dynamic {
     let configs = CONFIGS.lock().unwrap_or_else(|e| e.into_inner());
-    match configs.get(CURRENT.load(Ordering::Relaxed)).and_then(|c| c.table.get(key)) {
+    match configs.get(CURRENT.get()).and_then(|c| c.table.get(key)) {
         Some(toml::Value::String(v)) => v.clone().into(),
         Some(toml::Value::Integer(v)) => (*v).into(),
         Some(toml::Value::Float(v)) => (*v).into(),
@@ -222,7 +242,7 @@ fn config_set(key: &str, v: Dynamic) -> Result<(), Box<EvalAltResult>> {
         return Err(format!("config_set: '{key}' must be a bool, number or string").into());
     };
     let mut configs = CONFIGS.lock().unwrap_or_else(|e| e.into_inner());
-    if let Some(c) = configs.get_mut(CURRENT.load(Ordering::Relaxed)) {
+    if let Some(c) = configs.get_mut(CURRENT.get()) {
         if c.table.get(key) != Some(&value) {
             c.table.insert(key.into(), value);
             c.dirty = true;
@@ -234,12 +254,12 @@ fn config_set(key: &str, v: Dynamic) -> Result<(), Box<EvalAltResult>> {
 extern "C" fn hook_tramp(user: usize, inst: Handle, args: Handle) -> u8 {
     let (inst, args) = unsafe { (RObj::new(Obj::from_handle(inst)), RObj::new(Obj::from_handle(args))) };
     let (i, f) = unsafe { &*(user as *const (usize, String)) };
-    let Ok(mut g) = SCRIPTS.try_lock() else { return 1 };
-    let Some(s) = g.as_mut() else { return 1 };
-    call(s, *i, f, (inst, args)).and_then(|v| v.as_bool().ok()).unwrap_or(true) as u8
+    let Some(s) = SCRIPTS.get() else { return 1 };
+    let Some(mut m) = lock(&s.mods[*i]) else { return 1 }; // the script is busy: see lock()
+    call(&s.engine, *i, &mut m, f, (inst, args)).and_then(|v| v.as_bool().ok()).unwrap_or(true) as u8
 }
 
-fn to_obj(d: &Dynamic) -> Arc<Obj> {
+pub(crate) fn to_obj(d: &Dynamic) -> Arc<Obj> {
     if let Some(o) = d.clone().try_cast::<RObj>() {
         return o.0;
     }
@@ -294,7 +314,7 @@ fn engine() -> Engine {
 
     // patch("KSA.Vehicle", "SetEnum", "prefix" | "postfix", "my_fn") -> my_fn(instance, args) returns false to skip original
     e.register_fn("patch", |ty: &str, m: &str, kind: &str, f: &str| {
-        let user = Box::leak(Box::new((CURRENT.load(Ordering::Relaxed), f.to_string()))) as *const _ as usize;
+        let user = Box::leak(Box::new((CURRENT.get(), f.to_string()))) as *const _ as usize;
         oxidizer_api::patch(ty, m, kind == "postfix", hook_tramp, user)
     });
 

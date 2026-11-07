@@ -73,10 +73,11 @@ public static unsafe class Bridge
     [ThreadStatic] static Type? _resultType;
 
     [UnmanagedCallersOnly]
-    public static int Init(Api* api, Host* host)
+    public static int Init(Api* api, Host* host, Internal* internals)
     {
         try
         {
+            Describer.Fill(internals);
             _api = api;
             _host = *host;
             api->Free = &Free;
@@ -194,6 +195,79 @@ public static unsafe class Bridge
         return System.Convert.ChangeType(v, Nullable.GetUnderlyingType(t) ?? t);
     }
 
+    // ---- overloads ----
+
+    static readonly Dictionary<string, string> Keywords = new(StringComparer.OrdinalIgnoreCase)
+    {
+        ["bool"] = "Boolean", ["byte"] = "Byte", ["sbyte"] = "SByte", ["short"] = "Int16", ["ushort"] = "UInt16",
+        ["int"] = "Int32", ["uint"] = "UInt32", ["long"] = "Int64", ["ulong"] = "UInt64", ["float"] = "Single",
+        ["double"] = "Double", ["decimal"] = "Decimal", ["char"] = "Char", ["string"] = "String", ["object"] = "Object",
+    };
+
+    /// "Name" or "Name(double, bool)": the name, and the parameter types when given.
+    static (string name, string[]? sig) ParseMember(string member)
+    {
+        int open = member.IndexOf('(');
+        if (open < 0 || !member.EndsWith(')')) return (member.Trim(), null);
+        var inner = member[(open + 1)..^1].Trim();
+        return (member[..open].Trim(), inner.Length == 0 ? [] : inner.Split(',').Select(x => x.Trim()).ToArray());
+    }
+
+    /// A parameter type written as a C# keyword (double), a short name (SimSpeed) or a full name (KSA.SimSpeed).
+    static bool TypeIs(Type t, string want)
+    {
+        if (t.IsByRef) t = t.GetElementType()!;
+        if (Keywords.TryGetValue(want, out var k)) want = k;
+        var full = t.FullName?.Replace('+', '.');
+        return t.Name == want || full == want || (full?.EndsWith("." + want) ?? false);
+    }
+
+    /// All methods named `name` on `t` and its base classes, public or not.
+    static List<MethodInfo> Overloads(Type t, string name)
+    {
+        var found = new List<MethodInfo>();
+        for (var c = t; c != null; c = c.BaseType)
+            found.AddRange(c.GetMethods(All | BindingFlags.DeclaredOnly).Where(x => x.Name == name));
+        return found;
+    }
+
+    static string Describe(IEnumerable<MethodInfo> ms) =>
+        string.Join("; ", ms.Select(x => $"{x.Name}({string.Join(", ", x.GetParameters().Select(p => p.ParameterType.Name))})"));
+
+    /// The overload to call or patch. With a signature, that exact one. Otherwise, for a call (`args` given): the
+    /// only one with that many parameters, or the first whose parameter types are exactly the arguments', or the first
+    /// that can take them. For a patch (`args` null): the only overload. Errors list the overloads to choose from.
+    static MethodInfo PickMethod(Type t, string member, object?[]? args)
+    {
+        var (name, sig) = ParseMember(member);
+        var all = Overloads(t, name);
+        if (all.Count == 0) throw new MissingMethodException($"{t.FullName} has no method {name}");
+        if (sig != null)
+            return all.FirstOrDefault(x => x.GetParameters() is var ps && ps.Length == sig.Length && ps.Zip(sig).All(p => TypeIs(p.First.ParameterType, p.Second)))
+                ?? throw new MissingMethodException($"{t.FullName} has no {member}; there are: {Describe(all)}");
+        if (args == null)
+            return all.Count == 1 ? all[0]
+                : throw new AmbiguousMatchException($"{t.FullName}.{name} has {all.Count} overloads, name one like \"{name}(double)\": {Describe(all)}");
+        var fit = all.Where(x => x.GetParameters().Length == args.Length).ToList();
+        if (fit.Count == 1)
+            return Accepts(fit[0].GetParameters(), args) ? fit[0]
+                : throw new ArgumentException($"{Describe(fit)} can't take these arguments; there are: {Describe(all)}; name one like \"{name}(double)\"");
+        if (fit.Count == 0) throw new MissingMethodException($"{t.FullName}.{name} takes no {args.Length} arguments; there are: {Describe(all)}");
+        return fit.FirstOrDefault(x => x.GetParameters().Zip(args).All(p => p.Second == null || p.First.ParameterType.IsInstanceOfType(p.Second)))
+            ?? fit.FirstOrDefault(x => Accepts(x.GetParameters(), args))
+            ?? throw new AmbiguousMatchException($"no overload of {t.FullName}.{name} takes these arguments, name one like \"{name}(double)\": {Describe(fit)}");
+    }
+
+    static bool Accepts(ParameterInfo[] ps, object?[] args)
+    {
+        try
+        {
+            for (int i = 0; i < ps.Length; i++) Convert(args[i], ps[i].ParameterType);
+            return true;
+        }
+        catch { return false; }
+    }
+
     // ---- exported API ----
 
     [UnmanagedCallersOnly]
@@ -240,13 +314,12 @@ public static unsafe class Bridge
         {
             var obj = Obj(h);
             var t = Target(obj, ty, tyLen);
-            var name = Str(m, mLen);
-            // ponytail: first overload with matching arity wins; add type-based overload resolution if mods need it.
-            var method = t.GetMethods(All).FirstOrDefault(x => x.Name == name && x.GetParameters().Length == (int)n)
-                ?? throw new MissingMethodException(t.FullName, name);
+            var given = new object?[(int)n];
+            for (int i = 0; i < given.Length; i++) given[i] = Obj(args[i]);
+            var method = PickMethod(t, Str(m, mLen), given);
             var ps = method.GetParameters();
-            var a = new object?[(int)n];
-            for (int i = 0; i < a.Length; i++) a[i] = Convert(Obj(args[i]), ps[i].ParameterType);
+            var a = new object?[given.Length];
+            for (int i = 0; i < a.Length; i++) a[i] = Convert(given[i], ps[i].ParameterType);
             return Handle(method.Invoke(obj, a));
         }
         catch (Exception e) { Error($"call {Str(m, mLen)}", e); return 0; }
@@ -306,7 +379,7 @@ public static unsafe class Bridge
         try
         {
             var t = FindType(Str(ty, tyLen));
-            var method = AccessTools.Method(t, Str(m, mLen)) ?? throw new MissingMethodException(t.FullName, Str(m, mLen));
+            var method = PickMethod(t, Str(m, mLen), null);
             lock (Hooks)
             {
                 var isNew = !Hooks.TryGetValue(method, out var list);

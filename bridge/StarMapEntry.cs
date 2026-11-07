@@ -24,7 +24,7 @@ public unsafe class StarMapEntry
                 : OperatingSystem.IsMacOS() ? "liboxidizer_core.dylib"
                 : "liboxidizer_core.so";
             var lib = NativeLibrary.Load(Path.Combine(dir, file));
-            var attach = (delegate* unmanaged<delegate* unmanaged<Api*, Host*, int>, int>)NativeLibrary.GetExport(lib, "oxidizer_attach");
+            var attach = (delegate* unmanaged<delegate* unmanaged<Api*, Host*, Internal*, int>, int>)NativeLibrary.GetExport(lib, "oxidizer_attach");
             _shutdown = (delegate* unmanaged<void>)NativeLibrary.GetExport(lib, "oxidizer_shutdown");
             if (attach(&Bridge.Init) == 0) Console.WriteLine("[oxidizer] could not start (see above)");
         }

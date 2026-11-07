@@ -5,6 +5,7 @@
 //!
 //! Either way the bridge's `Init` is handed in, the Api table is filled, and the mods are loaded.
 
+mod ksa_rhai;
 mod script;
 mod ui;
 
@@ -16,7 +17,22 @@ use std::sync::{Once, OnceLock};
 use std::fs;
 
 /// `Bridge.Init` from bridge/Bridge.cs.
-pub type BridgeInit = unsafe extern "C" fn(*mut Api, *const Host) -> i32;
+pub type BridgeInit = unsafe extern "C" fn(*mut Api, *const Host, *mut Internal) -> i32;
+
+/// Bridge functions only Oxidizer itself uses (not part of the mod API). Must match `Internal` in bridge/Describe.cs.
+#[repr(C)]
+pub struct Internal {
+    /// The game's public types and members, as text (see Describe.cs): fills buf, returns the full length.
+    pub describe: extern "C" fn(*mut u8, usize) -> usize,
+    /// 0 null, 1 bool, 2 integer or enum, 3 floating point, 4 string, 5 other object.
+    pub kind: extern "C" fn(oxidizer_api::Handle) -> u8,
+}
+
+static INTERNAL: OnceLock<&'static Internal> = OnceLock::new();
+
+fn internal() -> &'static Internal {
+    INTERNAL.get().expect("bridge not attached")
+}
 
 /// Callbacks and settings for the bridge. Field order must match `Host` in `bridge/Bridge.cs`.
 #[repr(C)]
@@ -81,13 +97,15 @@ extern "C" fn on_menu() {
 /// `bridge_init` must be the bridge's `Init`, called once, before the game's `Main`.
 pub unsafe fn attach(bridge_init: BridgeInit, instance: &str) -> Result<(), String> {
     let api: &'static mut MaybeUninit<Api> = Box::leak(Box::new(MaybeUninit::uninit()));
+    let internals: &'static mut MaybeUninit<Internal> = Box::leak(Box::new(MaybeUninit::uninit()));
     let instance: &'static str = Box::leak(instance.into());
     unsafe {
         (&raw mut (*api.as_mut_ptr()).log).write(api_log);
         let host = Host { frame: on_frame, gui: on_gui, menu: on_menu, instance: instance.as_ptr(), instance_len: instance.len() };
-        if bridge_init(api.as_mut_ptr(), &host) == 0 {
+        if bridge_init(api.as_mut_ptr(), &host, internals.as_mut_ptr()) == 0 {
             return Err("bridge init failed".into());
         }
+        let _ = INTERNAL.set(internals.assume_init_ref());
         let api: &'static Api = api.assume_init_ref();
         oxidizer_api::set_api(api);
         load_mods(api);
