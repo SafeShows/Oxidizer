@@ -133,7 +133,7 @@ The game is available as typed modules, built from the installed game when Oxidi
 ```rhai
 let v = ksa::Program::controlled_vehicle();          // static members: a module per namespace and type
 print(`${v.id} at ${ksa::Universe::get_elapsed_seconds()} s`);  // instance properties: v.id, v.throttle = 0.5
-v.set_enum(ksa::VehicleEngine::Ignite);              // instance methods; enum values are integer constants
+ksa::Universe::set_simulation_speed(2.0, false);     // overloads resolve by argument count; enums: ksa::VehicleEngine::MainIgnite
 ```
 
 Numbers, bools and strings come back as Rhai values; other game objects as `Obj`. Names are the game's in snake_case. Static methods with the same name and number of arguments get `_2`, `_3`, ... suffixes. On every new game version, Oxidizer writes definition files describing all of it (and its own functions) to `<documents>/oxidizer/definitions/`, so editors with Rhai language support can autocomplete: add that folder to your editor's workspace.

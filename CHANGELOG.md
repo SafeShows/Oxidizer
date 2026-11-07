@@ -7,7 +7,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ### Added
 
-- Typed game access for Rhai, built from the installed game at startup: `ksa::Program::controlled_vehicle()`, `vehicle.id`, `vehicle.set_throttle(0.5)`, `ksa::SimSpeed::Fast`. Numbers, bools and strings come back as Rhai values. Takes about 0.4 s at startup for the whole game (about 32,000 functions).
+- Typed game access for Rhai, built from the installed game at startup: `ksa::Program::controlled_vehicle()`, `vehicle.id`, `vehicle.throttle = 0.5`, `ksa::Universe::set_simulation_speed(2.0, false)`, enum values like `ksa::VehicleEngine::MainIgnite`. Numbers, bools and strings come back as Rhai values. Takes about 0.4 s at startup for the whole game (about 32,000 functions).
 - Rhai definition files for editors, written to `<documents>/oxidizer/definitions/` on each new game version, so editors with Rhai support can autocomplete the game and Oxidizer's functions.
 - Overloads can be named with their parameter types in `static_call`, `call` and `patch`: `"SetSimulationSpeed(double, bool)"`. Without them, the overload whose parameter types match the arguments is picked, and errors list the overloads.
 
