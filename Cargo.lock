@@ -226,7 +226,7 @@ dependencies = [
 
 [[package]]
 name = "oxidizer"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "libloading",
  "oxidizer_api",
@@ -236,7 +236,7 @@ dependencies = [
 
 [[package]]
 name = "oxidizer_api"
-version = "0.2.0"
+version = "0.2.1"
 dependencies = [
  "libloading",
 ]

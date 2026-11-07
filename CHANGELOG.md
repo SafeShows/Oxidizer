@@ -5,6 +5,8 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-11-07
+
 ### Added
 
 - Linux support. Releases include `Oxidizer-<version>-linux.zip` next to the Windows zip.
@@ -12,7 +14,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ### Changed
 
-- ImGui calls go through the plain C functions the game itself uses, instead of C++ names that only exist on Windows.
+- ImGui calls go through the plain C functions the game itself uses, instead of C++ names that only exist on Windows. This is in `oxidizer_api` 0.2.1: Rust mods that should run on Linux need to be built with it. Mods built with 0.2.0 keep working on Windows.
 - The example mods declare `[loader] id = "Oxidizer"` in their `mod.toml`, which mod managers such as Borea read.
 
 ## [0.2.0] - 2026-11-07
@@ -50,6 +52,7 @@ First release.
 - When a method has several overloads, `call` and patching use the first one with a matching number of arguments.
 - Hooks can't read or change a patched method's return value.
 
-[Unreleased]: https://github.com/SafeShows/Oxidizer/compare/v0.2.0...HEAD
+[Unreleased]: https://github.com/SafeShows/Oxidizer/compare/v0.3.0...HEAD
+[0.3.0]: https://github.com/SafeShows/Oxidizer/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/SafeShows/Oxidizer/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/SafeShows/Oxidizer/releases/tag/v0.1.0
