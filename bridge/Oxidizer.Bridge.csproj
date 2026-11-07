@@ -8,5 +8,7 @@
   </PropertyGroup>
   <ItemGroup>
     <PackageReference Include="Lib.Harmony" Version="2.4.2" />
+    <!-- Compile-only: StarMap provides StarMap.API at runtime, and mods must not ship it. -->
+    <PackageReference Include="StarMap.API" Version="0.3.6" ExcludeAssets="runtime" PrivateAssets="all" />
   </ItemGroup>
 </Project>

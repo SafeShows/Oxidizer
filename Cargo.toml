@@ -6,6 +6,16 @@ license = "MIT"
 repository = "https://github.com/SafeShows/Oxidizer"
 publish = false
 
+# The core as a library: linked into the `oxidizer` launcher, and built as `oxidizer_core.dll` /
+# `liboxidizer_core.so` / `liboxidizer_core.dylib` for the StarMap mod (Oxidizer.StarMap).
+[lib]
+name = "oxidizer_core"
+crate-type = ["cdylib", "rlib"]
+
+[[bin]]
+name = "oxidizer"
+path = "src/main.rs"
+
 [dependencies]
 oxidizer_api = { version = "0.3.0", path = "oxidizer_api" }
 libloading = "0.9.0"

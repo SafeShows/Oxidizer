@@ -1,0 +1,6 @@
+# Oxidizer as a StarMap mod: StarMap loads Oxidizer.Bridge.dll, which loads Oxidizer's core library from this folder
+# and then runs the Rhai and Rust mods (those with an [oxidizer] section in their mod.toml).
+name = "Oxidizer.StarMap"
+
+[StarMap]
+EntryAssembly = "Oxidizer.Bridge"

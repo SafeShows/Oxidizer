@@ -5,6 +5,20 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ## [Unreleased]
 
+### Added
+
+- Oxidizer runs as a StarMap mod: `Oxidizer.StarMap-<version>.zip` holds an `Oxidizer.StarMap` folder for `mods/`. StarMap starts the game and loads it like any C# mod, and Oxidizer then runs the Rhai and Rust mods, side by side with StarMap's C# mods. Standalone Oxidizer stays as it was.
+- Oxidizer's core is also a library (`oxidizer_core.dll` / `liboxidizer_core.so`), which the StarMap mod loads.
+
+### Changed
+
+- Rust mods keep their library in a subfolder, `dll = "bin/my_mod"`: StarMap tries to load `mods/<id>/<id>.dll` as a C# mod, and a native library there stops the game. `dll` paths may now include folders.
+- Release zips are named `Oxidizer-<version>.zip` and `Oxidizer.StarMap-<version>.zip` (no `v`), which the content index needs to tell them apart.
+
+### Removed
+
+- The `[loader]` table in the example `mod.toml` files: nothing reads it there. Loaders are declared in the content index listing.
+
 ## [0.4.0] - 2026-11-07
 
 Rust mods: the new API is in `oxidizer_api` 0.3.0.

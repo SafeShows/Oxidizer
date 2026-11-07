@@ -1,21 +1,26 @@
 # Oxidizer
 
-A mod loader for Kitten Space Agency, written in Rust. Mods can be written in Rust (cdylib) or as Rhai scripts. Runs on Windows and Linux.
+A mod loader for Kitten Space Agency, written in Rust. Mods can be written in Rust (cdylib) or as Rhai scripts. Runs on Windows and Linux, on its own or as a [StarMap](https://github.com/StarMapLoader/StarMap) mod next to C# mods.
 
 ![The two example mods, one in Rhai and one in Rust, drawing ImGui windows in game](docs/screenshot.png)
 
-KSA is a .NET 10 game, so the loader:
-1. loads the game's own `hostfxr` (`hostfxr.dll` / `libhostfxr.so`) and starts its runtime with `KSA.dll`,
-2. injects `bridge/` (a small C# DLL plus Harmony), which hooks `Program.OnFrame`, `Program.OnDrawUiViewports` and the game's menu bar, and gives mods reflection access to game objects,
-3. loads the mods, then runs the game's `Main`.
+KSA is a .NET 10 game, so Oxidizer has a small C# bridge (with Harmony) that hooks `Program.OnFrame`, `Program.OnDrawUiViewports` and the game's menu bar and gives mods access to game objects, and a native core that runs the Rhai and Rust mods. It starts in one of two ways:
+- **As a StarMap mod** (`Oxidizer.StarMap`): StarMap starts the game and loads the bridge like any C# mod, and the bridge loads the core. Use this if you use StarMap or other C# mods.
+- **Standalone** (`oxidizer`): Oxidizer starts the game's .NET runtime itself (`hostfxr.dll` / `libhostfxr.so` from the game folder), loads the bridge, then runs the game's `Main`. No StarMap needed.
 
 In game, **Mods > Oxidizer** in the menu bar opens a window that lists the loaded mods, their errors and the log.
 
 ## Install
 
-1. Download `Oxidizer-vX.Y.Z.zip` from [Releases](https://github.com/SafeShows/Oxidizer/releases) and unzip it anywhere. It has both the Windows and the Linux build.
+The [releases](https://github.com/SafeShows/Oxidizer/releases) have two zips, each with the Windows and the Linux build.
+
+**As a StarMap mod:** unzip `Oxidizer.StarMap-X.Y.Z.zip` into `Documents/My Games/Kitten Space Agency/mods/` (so there is a `mods/Oxidizer.StarMap/` folder) and start the game through StarMap as usual.
+
+**Standalone:**
+1. Unzip `Oxidizer-X.Y.Z.zip` anywhere.
 2. Run `oxidizer.exe` (Linux: `./oxidizer`). If KSA isn't installed at the default path, set `game_path` in the `oxidizer.toml` it creates next to the exe. On Linux there is no default, so set it on the first run.
-3. To try the examples, copy the folders from `example-mods/` into `Documents/My Games/Kitten Space Agency/mods/`.
+
+To try the example mods, copy the folders from `example-mods/` in the standalone zip into `Documents/My Games/Kitten Space Agency/mods/`. Mod managers such as Borea install either one for you.
 
 ## Build
 
@@ -44,16 +49,27 @@ A mod is a folder in `Documents/My Games/Kitten Space Agency/mods/<id>/` whose `
 name = "my_mod"
 
 [oxidizer]
-dll = "my_mod"          # Rust mod: my_mod.dll on Windows, libmy_mod.so on Linux
+dll = "bin/my_mod"      # Rust mod: bin/my_mod.dll on Windows, bin/libmy_mod.so on Linux
 script = "main.rhai"    # and/or Rhai script
-
-# Tells mod managers such as Borea which loader this mod needs.
-[loader]
-id = "Oxidizer"
-min = "0.2.0"
 ```
 
-Mods set `enabled = false` in KSA's `manifest.toml` are skipped. See `examples/` for working mods. To install one, copy its folder into `mods/`; for a Rust mod, also copy in the built library (`.dll` on Windows, `lib*.so` on Linux). A mod for both platforms can ship both files.
+Mods set `enabled = false` in KSA's `manifest.toml` are skipped. See `examples/` for working mods. To install one, copy its folder into `mods/`; for a Rust mod, also copy the built library into its `bin/` folder (`.dll` on Windows, `lib*.so` on Linux). A mod for both platforms can ship both files.
+
+Keep a Rust mod's library in a subfolder like `bin/`, not next to `mod.toml`: StarMap tries to load `mods/<id>/<id>.dll` as a C# mod, and a native library there stops the game.
+
+**Listing a mod in the content index:** Oxidizer mods are listed as StarMap mods that need `Oxidizer.StarMap`, so mod managers install everything they need:
+
+```toml
+[loader]
+id = "StarMap"
+
+[[dependencies]]
+id = "Oxidizer.StarMap"
+kind = "required"
+min = "0.5.0"
+```
+
+The same mod also runs with standalone Oxidizer.
 
 ### Rust
 

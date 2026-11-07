@@ -1,9 +1,5 @@
 name = "hello_rust"
 
 [oxidizer]
-dll = "hello_rust"   # hello_rust.dll on Windows, libhello_rust.so on Linux
-
-# Tells mod managers such as Borea which loader this mod needs.
-[loader]
-id = "Oxidizer"
-min = "0.2.0"
+# In bin/, not next to mod.toml: StarMap tries to load <folder>.dll as a .NET assembly.
+dll = "bin/hello_rust"   # bin/hello_rust.dll on Windows, bin/libhello_rust.so on Linux
