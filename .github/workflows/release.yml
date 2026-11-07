@@ -38,7 +38,9 @@ jobs:
         run: |
           $d = "dist/Oxidizer"
           New-Item -ItemType Directory -Force "$d/bridge", "$d/example-mods/hello_rust", "$d/example-mods/hello_rhai" | Out-Null
-          Copy-Item target/release/oxidizer.exe, README.md, LICENSE $d
+          Copy-Item target/release/oxidizer.exe, README.md, LICENSE, CHANGELOG.md $d
+          python scripts/notices.py "$d/THIRD-PARTY-NOTICES.txt"
+          if ($LASTEXITCODE) { exit 1 }
           Copy-Item target/bridge/0Harmony.dll, target/bridge/Oxidizer.Bridge.dll "$d/bridge"
           Copy-Item examples/hello_rust/mod.toml, target/release/hello_rust.dll "$d/example-mods/hello_rust"
           Copy-Item examples/hello_rhai/* "$d/example-mods/hello_rhai"

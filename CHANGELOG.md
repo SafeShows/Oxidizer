@@ -5,6 +5,16 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ## [Unreleased]
 
+### Added
+
+- A **Mods** menu in the game's menu bar. **Mods > Oxidizer** opens a window that lists the loaded mods with their state and errors, and shows the log.
+- Mods can add their own entries to the Mods menu: `menu()` in Rhai, `Mod::menu` in Rust.
+- Rhai scripts reload while the game runs when their file is saved. State in `this` is kept, `init()` doesn't run again, and an optional `reload()` runs instead. If the new version doesn't compile, the old one keeps running and the error shows in the Oxidizer window.
+- A script that failed to compile at startup, or stopped after an error, starts again once its file is saved.
+- Instances: `-InstancePath <folder>` or the `OXIDIZER_INSTANCE_PATH` environment variable makes the game use that folder for mods, saves and settings instead of `Documents/My Games/Kitten Space Agency`. Mod managers such as Borea use this for separate game profiles.
+- `oxidizer_api`: ImGui menus (`begin_menu`, `end_menu`, `menu_item`), closable windows, `set_next_window_size`, scrolling child regions and colored text.
+- The release zip includes `THIRD-PARTY-NOTICES.txt` with the licenses of Harmony, the libraries bundled in it, and every Rust crate compiled into `oxidizer.exe`.
+
 ## [0.1.0] - 2026-11-07
 
 First release.

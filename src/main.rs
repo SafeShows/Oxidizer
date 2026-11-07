@@ -1,12 +1,15 @@
 //! KSA mod loader: hosts the game's .NET runtime via hostfxr, injects the C# bridge,
 //! loads Rust (cdylib) and Rhai mods, then runs KSA's Main.
 //!
-//! Usage: oxidizer [--game <KSA dir>] [game args...]
+//! Usage: oxidizer [--game <KSA dir>] [-InstancePath <dir>] [game args...]
 //! Game dir can also be set in `oxidizer.toml` next to the exe: `game_path = '...'`.
+//! The instance (the folder used instead of Documents/My Games/Kitten Space Agency)
+//! can also come from the OXIDIZER_INSTANCE_PATH environment variable.
 
 mod script;
+mod ui;
 
-use oxidizer_api::Api;
+use oxidizer_api::{Api, imgui};
 use libloading::Library;
 use std::ffi::c_void;
 use std::mem::MaybeUninit;
@@ -35,16 +38,21 @@ struct InitParams {
     dotnet_root: *const u16,
 }
 
+/// Callbacks and settings for the bridge. Field order must match `Host` in `bridge/Bridge.cs`.
 #[repr(C)]
 struct Host {
     frame: extern "C" fn(f64, f64),
     gui: extern "C" fn(f64),
+    menu: extern "C" fn(),
+    /// UTF-8 instance folder, empty for the normal Documents folder.
+    instance: *const u8,
+    instance_len: usize,
 }
 
 struct RustMod {
-    name: String,
     frame: Option<extern "C" fn(f64, f64)>,
     gui: Option<extern "C" fn(f64)>,
+    menu: Option<extern "C" fn()>,
     unload: Option<extern "C" fn()>,
 }
 
@@ -52,6 +60,7 @@ static RUST_MODS: OnceLock<Vec<RustMod>> = OnceLock::new();
 
 pub fn log(s: &str) {
     println!("[oxidizer] {s}");
+    ui::push_log(s.to_string());
 }
 
 extern "C" fn api_log(p: *const u8, n: usize) {
@@ -59,6 +68,7 @@ extern "C" fn api_log(p: *const u8, n: usize) {
 }
 
 extern "C" fn on_frame(t: f64, dt: f64) {
+    script::reload_changed();
     for m in RUST_MODS.get().into_iter().flatten() {
         m.frame.map(|f| f(t, dt));
     }
@@ -70,6 +80,19 @@ extern "C" fn on_gui(dt: f64) {
         m.gui.map(|f| f(dt));
     }
     script::call_all("gui", (dt,));
+    ui::draw();
+}
+
+/// Runs inside the game's menu bar (after its own menus).
+extern "C" fn on_menu() {
+    if imgui::begin_menu("Mods") {
+        ui::menu_item();
+        for m in RUST_MODS.get().into_iter().flatten() {
+            m.menu.map(|f| f());
+        }
+        script::call_all("menu", ());
+        imgui::end_menu();
+    }
 }
 
 fn wide(s: impl AsRef<std::ffi::OsStr>) -> Vec<u16> {
@@ -106,6 +129,16 @@ fn game_dir(args: &mut Vec<String>) -> PathBuf {
     }
 }
 
+/// `-InstancePath <dir>` (removed from the game's arguments) or OXIDIZER_INSTANCE_PATH, as Borea passes it.
+fn instance_path(args: &mut Vec<String>) -> String {
+    if let Some(i) = args.iter().position(|a| a.eq_ignore_ascii_case("-InstancePath")) {
+        let v = args.get(i + 1).cloned().unwrap_or_else(|| fail("-InstancePath needs a folder"));
+        args.drain(i..=i + 1);
+        return v;
+    }
+    env::var("OXIDIZER_INSTANCE_PATH").unwrap_or_default()
+}
+
 fn bridge_dir() -> PathBuf {
     let exe = env::current_exe().unwrap();
     let dir = exe.parent().unwrap();
@@ -118,6 +151,7 @@ fn bridge_dir() -> PathBuf {
 fn main() {
     let mut args: Vec<String> = env::args().skip(1).collect();
     let game = game_dir(&mut args);
+    let instance = instance_path(&mut args);
     let ksa_dll = game.join("KSA.dll");
     if !ksa_dll.exists() {
         fail(&format!("KSA.dll not found in {}", game.display()));
@@ -155,7 +189,8 @@ fn main() {
 
         let api: &'static mut MaybeUninit<Api> = Box::leak(Box::new(MaybeUninit::uninit()));
         (&raw mut (*api.as_mut_ptr()).log).write(api_log);
-        if bridge_init(api.as_mut_ptr(), &Host { frame: on_frame, gui: on_gui }) == 0 {
+        let host = Host { frame: on_frame, gui: on_gui, menu: on_menu, instance: instance.as_ptr(), instance_len: instance.len() };
+        if bridge_init(api.as_mut_ptr(), &host) == 0 {
             fail("bridge init failed");
         }
         let api: &'static Api = api.assume_init_ref();
@@ -188,20 +223,25 @@ fn load_mods(api: &'static Api) {
         let Some(section) = cfg.get("oxidizer").and_then(|v| v.as_table()) else { continue };
         if disabled.contains(&id) {
             log(&format!("{id}: disabled in manifest"));
+            ui::set_status(&id, "mod", Some("disabled in the game's mod list".into()));
             continue;
         }
         if let Some(dll) = section.get("dll").and_then(|v| v.as_str()) {
-            match unsafe { load_rust_mod(&id, &dir.join(dll), api) } {
-                Ok(m) => rust.push(m),
-                Err(e) => log(&format!("{id}: {e}")),
+            match unsafe { load_rust_mod(&dir.join(dll), api) } {
+                Ok(m) => {
+                    log(&format!("loaded rust mod {id}"));
+                    ui::set_status(&id, "Rust", None);
+                    rust.push(m);
+                }
+                Err(e) => {
+                    log(&format!("{id}: {e}"));
+                    ui::set_status(&id, "Rust", Some(e.to_string()));
+                }
             }
         }
         if let Some(s) = section.get("script").and_then(|v| v.as_str()) {
             scripts.push((id.clone(), dir.join(s)));
         }
-    }
-    for m in &rust {
-        log(&format!("loaded rust mod {}", m.name));
     }
     let _ = RUST_MODS.set(rust);
     script::load(scripts);
@@ -215,7 +255,7 @@ fn disabled_mods(manifest: &Path) -> Vec<String> {
         .collect()
 }
 
-unsafe fn load_rust_mod(id: &str, path: &Path, api: &'static Api) -> Result<RustMod, Box<dyn std::error::Error>> {
+unsafe fn load_rust_mod(path: &Path, api: &'static Api) -> Result<RustMod, Box<dyn std::error::Error>> {
     unsafe {
         let lib = Library::new(path)?;
         let version: extern "C" fn() -> u32 = *lib.get(b"oxidizer_api_version\0")?;
@@ -224,9 +264,9 @@ unsafe fn load_rust_mod(id: &str, path: &Path, api: &'static Api) -> Result<Rust
         }
         let init: extern "C" fn(&'static Api) = *lib.get(b"oxidizer_init\0")?;
         let m = RustMod {
-            name: id.into(),
             frame: lib.get(b"oxidizer_frame\0").ok().map(|s| *s),
             gui: lib.get(b"oxidizer_gui\0").ok().map(|s| *s),
+            menu: lib.get(b"oxidizer_menu\0").ok().map(|s| *s),
             unload: lib.get(b"oxidizer_unload\0").ok().map(|s| *s),
         };
         std::mem::forget(lib); // mods stay loaded for the process lifetime (hooks may point into them)

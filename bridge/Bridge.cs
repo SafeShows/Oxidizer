@@ -30,11 +30,15 @@ public unsafe struct Api
     public delegate* unmanaged<byte*, nuint, nuint> DocsPath;
 }
 
+// Must match `Host` in src/main.rs.
 [StructLayout(LayoutKind.Sequential)]
 public unsafe struct Host
 {
     public delegate* unmanaged<double, double, void> Frame;
     public delegate* unmanaged<double, void> Gui;
+    public delegate* unmanaged<void> Menu;
+    public byte* Instance; // UTF-8 instance folder, empty for the normal Documents folder
+    public nuint InstanceLen;
 }
 
 public static unsafe class Bridge
@@ -43,6 +47,7 @@ public static unsafe class Bridge
 
     static Api* _api;
     static Host _host;
+    static string? _instance;
     static readonly Harmony Harmony = new("oxidizer");
     static readonly ConcurrentDictionary<string, Type?> Types = new();
     static readonly ConcurrentDictionary<MethodBase, (bool post, nint cb, nint user)[]> Hooks = new();
@@ -71,6 +76,17 @@ public static unsafe class Bridge
             var program = Type.GetType("KSA.Program, KSA", true)!;
             Harmony.Patch(AccessTools.Method(program, "OnFrame"), postfix: new HarmonyMethod(typeof(Bridge), nameof(AfterFrame)));
             Harmony.Patch(AccessTools.Method(program, "OnDrawUiViewports"), postfix: new HarmonyMethod(typeof(Bridge), nameof(AfterGui)));
+            // Empty method the game calls inside its menu bar, after its own menus.
+            Harmony.Patch(AccessTools.Method(program, "DrawProgramMenusHook"), postfix: new HarmonyMethod(typeof(Bridge), nameof(AfterMenus)));
+
+            if (host->InstanceLen > 0)
+            {
+                // Borea instance: the game's whole documents folder (mods, saves, settings) lives there.
+                _instance = Str(host->Instance, host->InstanceLen);
+                var constants = Type.GetType("KSA.Constants, KSA", true)!;
+                Harmony.Patch(AccessTools.PropertyGetter(constants, "DocumentsFolderPath"), prefix: new HarmonyMethod(typeof(Bridge), nameof(DocumentsFolder)));
+                Log($"instance: {_instance}");
+            }
             return 1;
         }
         catch (Exception e)
@@ -82,6 +98,13 @@ public static unsafe class Bridge
 
     static void AfterFrame(double currentPlayerTime, double dtPlayer) => _host.Frame(currentPlayerTime, dtPlayer);
     static void AfterGui(double dt) => _host.Gui(dt);
+    static void AfterMenus() => _host.Menu();
+
+    static bool DocumentsFolder(ref string __result)
+    {
+        __result = _instance!;
+        return false;
+    }
 
     // ---- helpers ----
 

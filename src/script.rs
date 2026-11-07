@@ -1,12 +1,19 @@
-//! Rhai script mods. Each script may define `init()`, `frame(t, dt)`, `gui(dt)`, `unload()`.
-//! Per-mod state lives in `this` (an object map), e.g. `this.show = checkbox("Show", this.show ?? false);`.
+//! Rhai script mods. Each script may define `init()`, `frame(t, dt)`, `gui(dt)`, `menu()`, `unload()`,
+//! and `reload()`, which runs when the file was changed and reloaded while the game runs.
+//! Per-mod state lives in `this` (an object map) and survives reloads,
+//! e.g. `this.show = checkbox("Show", this.show ?? false);`.
 
-use crate::log;
+use crate::{log, ui};
 use oxidizer_api::{Handle, Obj, imgui};
 use rhai::{Array, CallFnOptions, Dynamic, Engine, FuncArgs, Map, Scope, AST};
-use std::path::PathBuf;
+use std::fs;
+use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};
+use std::time::{Duration, Instant, SystemTime};
+
+const KIND: &str = "Rhai";
+const RELOAD_CHECK: Duration = Duration::from_secs(1);
 
 #[derive(Clone)]
 struct RObj(Arc<Obj>);
@@ -19,10 +26,15 @@ impl RObj {
 
 struct Script {
     name: String,
+    path: PathBuf,
+    modified: Option<SystemTime>,
     ast: AST,
     scope: Scope<'static>,
     this: Dynamic,
+    /// Stopped after an error, until the file changes.
     dead: bool,
+    /// init() has run without error.
+    started: bool,
 }
 
 struct Scripts {
@@ -34,24 +46,101 @@ static SCRIPTS: Mutex<Option<Scripts>> = Mutex::new(None);
 /// Index of the script currently running, so `patch()` knows who registered a hook.
 static CURRENT: AtomicUsize = AtomicUsize::new(0);
 
+fn modified(path: &Path) -> Option<SystemTime> {
+    fs::metadata(path).and_then(|m| m.modified()).ok()
+}
+
+/// Compile the file and run its top-level code.
+fn compile(engine: &Engine, path: &Path) -> Result<(AST, Scope<'static>), String> {
+    let mut scope = Scope::new();
+    let ast = engine.compile_file(path.into()).map_err(|e| e.to_string())?;
+    engine.run_ast_with_scope(&mut scope, &ast).map_err(|e| e.to_string())?;
+    Ok((ast, scope))
+}
+
+fn report(name: &str, problem: String) {
+    log(&format!("{name}: {problem}"));
+    ui::set_status(name, KIND, Some(problem));
+}
+
 pub fn load(list: Vec<(String, PathBuf)>) {
     if list.is_empty() {
         return;
     }
     let engine = engine();
-    let mut mods = vec![];
-    for (name, path) in list {
-        let mut scope = Scope::new();
-        match engine.compile_file(path).and_then(|ast| engine.run_ast_with_scope(&mut scope, &ast).map(|_| ast)) {
-            Ok(ast) => {
-                log(&format!("loaded script mod {name}"));
-                mods.push(Script { name, ast, scope, this: Map::new().into(), dead: false });
+    let mods = list
+        .into_iter()
+        .map(|(name, path)| {
+            let modified = modified(&path);
+            // A script that doesn't compile stays in the list, so fixing the file starts it.
+            let (ast, scope, dead) = match compile(&engine, &path) {
+                Ok((ast, scope)) => {
+                    log(&format!("loaded script mod {name}"));
+                    (ast, scope, false)
+                }
+                Err(e) => {
+                    report(&name, e);
+                    (AST::empty(), Scope::new(), true)
+                }
+            };
+            Script { name, path, modified, ast, scope, this: Map::new().into(), dead, started: false }
+        })
+        .collect();
+    let mut g = SCRIPTS.lock().unwrap();
+    let s = g.insert(Scripts { engine, mods });
+    for i in 0..s.mods.len() {
+        start(s, i);
+    }
+}
+
+/// Runs init() once per script.
+fn start(s: &mut Scripts, i: usize) {
+    if s.mods[i].dead {
+        return;
+    }
+    call(s, i, "init", ());
+    let m = &mut s.mods[i];
+    m.started = !m.dead;
+    if m.started {
+        ui::set_status(&m.name, KIND, None);
+    }
+}
+
+/// Reloads scripts whose file changed (checked once a second). `this` is kept; a script that
+/// never started runs init(), the others run reload(). Hooks call the new code by name.
+pub fn reload_changed() {
+    static LAST: Mutex<Option<Instant>> = Mutex::new(None);
+    {
+        let mut last = LAST.lock().unwrap_or_else(|e| e.into_inner());
+        if last.is_some_and(|t| t.elapsed() < RELOAD_CHECK) {
+            return;
+        }
+        *last = Some(Instant::now());
+    }
+    let Ok(mut g) = SCRIPTS.try_lock() else { return };
+    let Some(s) = g.as_mut() else { return };
+    for i in 0..s.mods.len() {
+        let t = modified(&s.mods[i].path);
+        if t == s.mods[i].modified {
+            continue;
+        }
+        s.mods[i].modified = t;
+        match compile(&s.engine, &s.mods[i].path) {
+            Ok((ast, scope)) => {
+                let m = &mut s.mods[i];
+                (m.ast, m.scope, m.dead) = (ast, scope, false);
+                log(&format!("reloaded script mod {}", m.name));
+                ui::set_status(&m.name, KIND, None);
+                if m.started {
+                    call(s, i, "reload", ());
+                } else {
+                    start(s, i);
+                }
             }
-            Err(e) => log(&format!("{name}: {e}")),
+            // The previous version keeps running (unless it had stopped).
+            Err(e) => report(&s.mods[i].name.clone(), format!("reload failed: {e}")),
         }
     }
-    *SCRIPTS.lock().unwrap() = Some(Scripts { engine, mods });
-    call_all("init", ());
 }
 
 pub fn call_all(f: &str, args: impl FuncArgs + Clone) {
@@ -73,9 +162,9 @@ fn call(s: &mut Scripts, i: usize, f: &str, args: impl FuncArgs) -> Option<Dynam
     match s.engine.call_fn_with_options::<Dynamic>(opts, &mut m.scope, &m.ast, f, args) {
         Ok(v) => Some(v),
         Err(e) => {
-            // Errors in frame/gui would repeat every frame: stop the mod instead.
-            log(&format!("{}: {f}: {e} (script disabled)", m.name));
+            // Errors in frame/gui would repeat every frame: stop the script until its file changes.
             m.dead = true;
+            report(&m.name, format!("{f}: {e} (stopped until the file is saved again)"));
             None
         }
     }
@@ -165,5 +254,11 @@ fn engine() -> Engine {
         .register_fn("same_line", imgui::same_line)
         .register_fn("separator", imgui::separator)
         .register_fn("header", |l: &str| imgui::collapsing_header(l));
+
+    // menu entries (only inside menu(), which runs inside the "Mods" menu)
+    e.register_fn("menu_item", |l: &str| imgui::menu_item(l, false))
+        .register_fn("menu_item", |l: &str, selected: bool| imgui::menu_item(l, selected))
+        .register_fn("begin_menu", |l: &str| imgui::begin_menu(l))
+        .register_fn("end_menu", imgui::end_menu);
     e
 }

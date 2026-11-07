@@ -187,6 +187,8 @@ pub trait Mod: Send + 'static {
     fn frame(&mut self, _player_time: f64, _dt: f64) {}
     /// Inside the ImGui frame; draw windows here with [`imgui`].
     fn gui(&mut self, _dt: f64) {}
+    /// Inside the "Mods" menu of the game's menu bar; add entries with [`imgui::menu_item`].
+    fn menu(&mut self) {}
     fn unload(&mut self) {}
 }
 
@@ -228,6 +230,10 @@ macro_rules! oxidizer_mod {
         #[unsafe(no_mangle)]
         pub extern "C" fn oxidizer_gui(dt: f64) {
             __oxidizer_with("gui", |m| $crate::Mod::gui(m, dt))
+        }
+        #[unsafe(no_mangle)]
+        pub extern "C" fn oxidizer_menu() {
+            __oxidizer_with("menu", |m| $crate::Mod::menu(m))
         }
         #[unsafe(no_mangle)]
         pub extern "C" fn oxidizer_unload() {

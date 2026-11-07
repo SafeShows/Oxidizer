@@ -1,5 +1,6 @@
 //! Direct calls into KSA's own imgui.dll (C++ exports, same ImGui context as the game).
-//! Only valid inside `Mod::gui`. Like Dear ImGui: always call [`end`] after [`begin`].
+//! Only valid inside `Mod::gui` (and the menu functions inside `Mod::menu`).
+//! Like Dear ImGui: always call [`end`] after [`begin`], and [`end_child`] after [`begin_child`].
 
 use std::ffi::{CString, c_char};
 use std::sync::OnceLock;
@@ -9,6 +10,18 @@ struct ImVec2 {
     x: f32,
     y: f32,
 }
+
+#[repr(C)]
+struct ImVec4 {
+    x: f32,
+    y: f32,
+    z: f32,
+    w: f32,
+}
+
+const COL_TEXT: i32 = 0; // ImGuiCol_Text
+const COND_FIRST_USE_EVER: i32 = 4;
+const CHILD_BORDERS: i32 = 1;
 
 type S = *const c_char;
 
@@ -23,6 +36,17 @@ struct Fns {
     same_line: unsafe extern "C" fn(f32, f32),
     separator: unsafe extern "C" fn(),
     collapsing_header: unsafe extern "C" fn(S, i32) -> bool,
+    begin_menu: unsafe extern "C" fn(S, bool) -> bool,
+    end_menu: unsafe extern "C" fn(),
+    menu_item: unsafe extern "C" fn(S, S, bool, bool) -> bool,
+    set_next_window_size: unsafe extern "C" fn(*const ImVec2, i32),
+    begin_child: unsafe extern "C" fn(S, *const ImVec2, i32, i32) -> bool,
+    end_child: unsafe extern "C" fn(),
+    scroll_y: unsafe extern "C" fn() -> f32,
+    scroll_max_y: unsafe extern "C" fn() -> f32,
+    set_scroll_here_y: unsafe extern "C" fn(f32),
+    push_style_color: unsafe extern "C" fn(i32, *const ImVec4),
+    pop_style_color: unsafe extern "C" fn(i32),
 }
 
 fn fns() -> &'static Fns {
@@ -46,6 +70,17 @@ fn fns() -> &'static Fns {
             same_line: sym!("?SameLine@ImGui@@YAXMM@Z"),
             separator: sym!("?Separator@ImGui@@YAXXZ"),
             collapsing_header: sym!("?CollapsingHeader@ImGui@@YA_NPEBDH@Z"),
+            begin_menu: sym!("?BeginMenu@ImGui@@YA_NPEBD_N@Z"),
+            end_menu: sym!("?EndMenu@ImGui@@YAXXZ"),
+            menu_item: sym!("?MenuItem@ImGui@@YA_NPEBD0_N1@Z"),
+            set_next_window_size: sym!("?SetNextWindowSize@ImGui@@YAXAEBUImVec2@@H@Z"),
+            begin_child: sym!("?BeginChild@ImGui@@YA_NPEBDAEBUImVec2@@HH@Z"),
+            end_child: sym!("?EndChild@ImGui@@YAXXZ"),
+            scroll_y: sym!("?GetScrollY@ImGui@@YAMXZ"),
+            scroll_max_y: sym!("?GetScrollMaxY@ImGui@@YAMXZ"),
+            set_scroll_here_y: sym!("?SetScrollHereY@ImGui@@YAXM@Z"),
+            push_style_color: sym!("?PushStyleColor@ImGui@@YAXHAEBUImVec4@@@Z"),
+            pop_style_color: sym!("?PopStyleColor@ImGui@@YAXH@Z"),
         };
         std::mem::forget(lib);
         f
@@ -96,4 +131,54 @@ pub fn separator() {
 
 pub fn collapsing_header(label: &str) -> bool {
     unsafe { (fns().collapsing_header)(c(label).as_ptr(), 0) }
+}
+
+/// A window with a close button; `open` is set to false when it is clicked. Call [`end`] regardless.
+pub fn begin_closable(title: &str, open: &mut bool) -> bool {
+    unsafe { (fns().begin)(c(title).as_ptr(), open, 0) }
+}
+
+/// Size of the next window the first time it is ever shown (later the player's size is kept).
+pub fn set_next_window_size(w: f32, h: f32) {
+    unsafe { (fns().set_next_window_size)(&ImVec2 { x: w, y: h }, COND_FIRST_USE_EVER) }
+}
+
+/// A submenu. Only call [`end_menu`] when this returns true.
+pub fn begin_menu(label: &str) -> bool {
+    unsafe { (fns().begin_menu)(c(label).as_ptr(), true) }
+}
+
+pub fn end_menu() {
+    unsafe { (fns().end_menu)() }
+}
+
+/// A menu entry, shown with a check mark when `selected`. Returns true when clicked.
+pub fn menu_item(label: &str, selected: bool) -> bool {
+    unsafe { (fns().menu_item)(c(label).as_ptr(), std::ptr::null(), selected, true) }
+}
+
+/// A scrolling region with a border; a height of 0 fills the rest of the window. Call [`end_child`] regardless.
+pub fn begin_child(id: &str, height: f32) -> bool {
+    unsafe { (fns().begin_child)(c(id).as_ptr(), &ImVec2 { x: 0.0, y: height }, CHILD_BORDERS, 0) }
+}
+
+pub fn end_child() {
+    unsafe { (fns().end_child)() }
+}
+
+/// Keeps the current window scrolled to the bottom unless the player scrolled up. Call after the content.
+pub fn stick_to_bottom() {
+    unsafe {
+        if (fns().scroll_y)() >= (fns().scroll_max_y)() {
+            (fns().set_scroll_here_y)(1.0)
+        }
+    }
+}
+
+/// Text in a color (RGBA, 0..1).
+pub fn text_colored(rgba: [f32; 4], s: &str) {
+    let [x, y, z, w] = rgba;
+    unsafe { (fns().push_style_color)(COL_TEXT, &ImVec4 { x, y, z, w }) }
+    text(s);
+    unsafe { (fns().pop_style_color)(1) }
 }
