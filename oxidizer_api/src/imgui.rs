@@ -1,4 +1,4 @@
-//! Direct calls into KSA's own imgui.dll (C++ exports, same ImGui context as the game).
+//! Direct calls into KSA's own ImGui library (its plain C exports, the ones the game itself calls), so mods share the game's ImGui context.
 //! Only valid inside `Mod::gui` (and the menu functions inside `Mod::menu`).
 //! Like Dear ImGui: always call [`end`] after [`begin`], and [`end_child`] after [`begin_child`].
 
@@ -53,34 +53,34 @@ fn fns() -> &'static Fns {
     static F: OnceLock<Fns> = OnceLock::new();
     F.get_or_init(|| unsafe {
         // Already loaded by the game, so this just returns the existing module.
-        let lib = libloading::Library::new("imgui.dll").expect("imgui.dll not loaded");
+        let lib = libloading::Library::new(libloading::library_filename("imgui")).expect("the game's ImGui library is not loaded");
         macro_rules! sym {
             ($n:literal) => {
                 *lib.get(concat!($n, "\0").as_bytes()).expect($n)
             };
         }
         let f = Fns {
-            begin: sym!("?Begin@ImGui@@YA_NPEBDPEA_NH@Z"),
-            end: sym!("?End@ImGui@@YAXXZ"),
-            text: sym!("?TextUnformatted@ImGui@@YAXPEBD0@Z"),
-            button: sym!("?Button@ImGui@@YA_NPEBDAEBUImVec2@@@Z"),
-            checkbox: sym!("?Checkbox@ImGui@@YA_NPEBDPEA_N@Z"),
-            slider_float: sym!("?SliderFloat@ImGui@@YA_NPEBDPEAMMM0H@Z"),
-            input_double: sym!("?InputDouble@ImGui@@YA_NPEBDPEANNN0H@Z"),
-            same_line: sym!("?SameLine@ImGui@@YAXMM@Z"),
-            separator: sym!("?Separator@ImGui@@YAXXZ"),
-            collapsing_header: sym!("?CollapsingHeader@ImGui@@YA_NPEBDH@Z"),
-            begin_menu: sym!("?BeginMenu@ImGui@@YA_NPEBD_N@Z"),
-            end_menu: sym!("?EndMenu@ImGui@@YAXXZ"),
-            menu_item: sym!("?MenuItem@ImGui@@YA_NPEBD0_N1@Z"),
-            set_next_window_size: sym!("?SetNextWindowSize@ImGui@@YAXAEBUImVec2@@H@Z"),
-            begin_child: sym!("?BeginChild@ImGui@@YA_NPEBDAEBUImVec2@@HH@Z"),
-            end_child: sym!("?EndChild@ImGui@@YAXXZ"),
-            scroll_y: sym!("?GetScrollY@ImGui@@YAMXZ"),
-            scroll_max_y: sym!("?GetScrollMaxY@ImGui@@YAMXZ"),
-            set_scroll_here_y: sym!("?SetScrollHereY@ImGui@@YAXM@Z"),
-            push_style_color: sym!("?PushStyleColor@ImGui@@YAXHAEBUImVec4@@@Z"),
-            pop_style_color: sym!("?PopStyleColor@ImGui@@YAXH@Z"),
+            begin: sym!("Begin"),
+            end: sym!("End"),
+            text: sym!("TextUnformatted"),
+            button: sym!("Button"),
+            checkbox: sym!("Checkbox"),
+            slider_float: sym!("SliderFloat"),
+            input_double: sym!("InputDouble"),
+            same_line: sym!("SameLine"),
+            separator: sym!("Separator"),
+            collapsing_header: sym!("CollapsingHeader_0"),
+            begin_menu: sym!("BeginMenu"),
+            end_menu: sym!("EndMenu"),
+            menu_item: sym!("MenuItem_0"),
+            set_next_window_size: sym!("SetNextWindowSize"),
+            begin_child: sym!("BeginChild_0"),
+            end_child: sym!("EndChild"),
+            scroll_y: sym!("GetScrollY"),
+            scroll_max_y: sym!("GetScrollMaxY"),
+            set_scroll_here_y: sym!("SetScrollHereY"),
+            push_style_color: sym!("PushStyleColor_1"),
+            pop_style_color: sym!("PopStyleColor"),
         };
         std::mem::forget(lib);
         f
