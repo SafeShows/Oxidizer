@@ -2,6 +2,8 @@
 
 A mod loader for Kitten Space Agency, written in Rust. Mods can be written in Rust (cdylib) or as Rhai scripts.
 
+![The two example mods, one in Rhai and one in Rust, drawing ImGui windows in game](docs/screenshot.png)
+
 KSA is a .NET 10 game, so the loader:
 1. loads the game's own `hostfxr.dll` and starts its runtime with `KSA.dll`,
 2. injects `bridge/` (a small C# DLL plus Harmony), which hooks `Program.OnFrame` and `Program.OnDrawUiViewports` and gives mods reflection access to game objects,
