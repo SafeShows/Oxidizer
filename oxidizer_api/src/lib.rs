@@ -12,6 +12,10 @@ use std::sync::OnceLock;
 
 pub mod imgui;
 
+/// ABI version of [`Api`] and the mod exports. Bump on any layout/signature change;
+/// the loader refuses mods built against a different version.
+pub const API_VERSION: u32 = 1;
+
 /// .NET GCHandle. 0 = null.
 pub type Handle = usize;
 /// Hook callback: (user data, instance or 0 for static methods, object[] of args) -> 0 to skip the original (prefix only).
@@ -198,7 +202,11 @@ pub fn guard(name: &str, f: impl FnOnce()) {
 macro_rules! oxidizer_mod {
     ($t:ty) => {
         static __OXIDIZER_MOD: ::std::sync::Mutex<Option<$t>> = ::std::sync::Mutex::new(None);
-        fn __ksa_with(name: &str, f: impl FnOnce(&mut $t)) {
+        #[unsafe(no_mangle)]
+        pub extern "C" fn oxidizer_api_version() -> u32 {
+            $crate::API_VERSION
+        }
+        fn __oxidizer_with(name: &str, f: impl FnOnce(&mut $t)) {
             $crate::guard(name, || {
                 if let Some(m) = __OXIDIZER_MOD.lock().unwrap_or_else(|e| e.into_inner()).as_mut() {
                     f(m)
@@ -215,15 +223,15 @@ macro_rules! oxidizer_mod {
         }
         #[unsafe(no_mangle)]
         pub extern "C" fn oxidizer_frame(t: f64, dt: f64) {
-            __ksa_with("frame", |m| $crate::Mod::frame(m, t, dt))
+            __oxidizer_with("frame", |m| $crate::Mod::frame(m, t, dt))
         }
         #[unsafe(no_mangle)]
         pub extern "C" fn oxidizer_gui(dt: f64) {
-            __ksa_with("gui", |m| $crate::Mod::gui(m, dt))
+            __oxidizer_with("gui", |m| $crate::Mod::gui(m, dt))
         }
         #[unsafe(no_mangle)]
         pub extern "C" fn oxidizer_unload() {
-            __ksa_with("unload", |m| $crate::Mod::unload(m))
+            __oxidizer_with("unload", |m| $crate::Mod::unload(m))
         }
     };
 }

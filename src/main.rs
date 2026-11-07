@@ -215,9 +215,13 @@ fn disabled_mods(manifest: &Path) -> Vec<String> {
         .collect()
 }
 
-unsafe fn load_rust_mod(id: &str, path: &Path, api: &'static Api) -> Result<RustMod, libloading::Error> {
+unsafe fn load_rust_mod(id: &str, path: &Path, api: &'static Api) -> Result<RustMod, Box<dyn std::error::Error>> {
     unsafe {
         let lib = Library::new(path)?;
+        let version: extern "C" fn() -> u32 = *lib.get(b"oxidizer_api_version\0")?;
+        if version() != oxidizer_api::API_VERSION {
+            return Err(format!("built for API v{}, loader is v{}; rebuild the mod", version(), oxidizer_api::API_VERSION).into());
+        }
         let init: extern "C" fn(&'static Api) = *lib.get(b"oxidizer_init\0")?;
         let m = RustMod {
             name: id.into(),
