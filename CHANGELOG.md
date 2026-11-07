@@ -5,6 +5,8 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ## [Unreleased]
 
+## [0.6.0] - 2026-11-07
+
 ### Added
 
 - Typed game access for Rhai, built from the installed game at startup: `ksa::Program::controlled_vehicle()`, `vehicle.id`, `vehicle.throttle = 0.5`, `ksa::Universe::set_simulation_speed(2.0, false)`, enum values like `ksa::VehicleEngine::MainIgnite`. Numbers, bools and strings come back as Rhai values. Takes about 0.4 s at startup for the whole game (about 32,000 functions).
@@ -15,7 +17,6 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 - Rhai scripts no longer block each other: a script calling a method that another script hooks now runs that hook (before, it was skipped). Only a script hooking a method it calls itself is still skipped while it runs.
 - Patching finds private methods of base classes too.
-
 - The bridge is built against `StarMap.API` 0.5.2 (compile-only, as before). Tested with StarMap 0.5.2: Oxidizer's **Mods** menu merges with StarMap 0.5's built-in one, so players see a single menu with both C# and Oxidizer entries.
 
 ## [0.5.1] - 2026-11-07
@@ -105,7 +106,8 @@ First release.
 - When a method has several overloads, `call` and patching use the first one with a matching number of arguments.
 - Hooks can't read or change a patched method's return value.
 
-[Unreleased]: https://github.com/SafeShows/Oxidizer/compare/v0.5.1...HEAD
+[Unreleased]: https://github.com/SafeShows/Oxidizer/compare/v0.6.0...HEAD
+[0.6.0]: https://github.com/SafeShows/Oxidizer/compare/v0.5.1...v0.6.0
 [0.5.1]: https://github.com/SafeShows/Oxidizer/compare/v0.5.0...v0.5.1
 [0.5.0]: https://github.com/SafeShows/Oxidizer/compare/v0.4.0...v0.5.0
 [0.4.0]: https://github.com/SafeShows/Oxidizer/compare/v0.3.0...v0.4.0
