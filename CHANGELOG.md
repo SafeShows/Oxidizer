@@ -5,6 +5,8 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ## [Unreleased]
 
+## [0.6.1] - 2026-11-07
+
 ### Added
 
 - Standalone Oxidizer on macOS: `oxidizer-macos` finds the [macOS port](https://github.com/renancamm/ksa-macos-port)'s app in `~/Applications` (or `/Applications`) and restarts itself with the environment the port's launcher sets up (its .NET runtime, GLFW/KTX shims and Metal hooks), so it runs with no setup. Tested on an M3 Pro.
@@ -110,7 +112,8 @@ First release.
 - When a method has several overloads, `call` and patching use the first one with a matching number of arguments.
 - Hooks can't read or change a patched method's return value.
 
-[Unreleased]: https://github.com/SafeShows/Oxidizer/compare/v0.6.0...HEAD
+[Unreleased]: https://github.com/SafeShows/Oxidizer/compare/v0.6.1...HEAD
+[0.6.1]: https://github.com/SafeShows/Oxidizer/compare/v0.6.0...v0.6.1
 [0.6.0]: https://github.com/SafeShows/Oxidizer/compare/v0.5.1...v0.6.0
 [0.5.1]: https://github.com/SafeShows/Oxidizer/compare/v0.5.0...v0.5.1
 [0.5.0]: https://github.com/SafeShows/Oxidizer/compare/v0.4.0...v0.5.0
