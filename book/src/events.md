@@ -24,7 +24,7 @@ A Rhai map and a Rust struct with the same field names are the same value.
 
 === "Rhai"
 
-    ```rhai
+    ```rust
     fn init() {
         subscribe("weather_core.weather", "on_weather");   // the function, by name
         publish("my_mod.ready", true);
@@ -60,7 +60,7 @@ If a Rhai subscriber throws an error, that script stops, like any other Rhai err
 
 === "Rhai"
 
-    ```rhai
+    ```rust
     fn init() {
         provide("my_mod.add", "add");
     }
