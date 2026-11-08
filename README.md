@@ -142,7 +142,7 @@ Scripts reload while the game runs: save the file and the new code takes over wi
 
 | Area | Functions |
 |---|---|
-| Game objects | typed: `ksa::...` (above); by name: `static_get(type, member)`, `static_set(type, member, v)`, `static_call(type, method[, args])`, `obj.get(m)`, `obj.set(m, v)`, `obj.call(m[, args])`, `obj.float()`, `obj.is_null()`, `obj.len()`, `obj[i]`, `obj.to_string()` |
+| Game objects | typed: `ksa::...` (above); by name: `static_get(type, member)`, `static_set(type, member, v)`, `static_call(type, method[, args])`, `obj.get(m)`, `obj.set(m, v)`, `obj.invoke(m[, args])`, `obj.float()`, `obj.is_null()`, `obj.len()`, `obj[i]`, `obj.to_string()` |
 | Patching | `patch(type, method, "prefix"\|"postfix", "fn_name")`. The callback is `fn_name(instance, args)`; returning `false` from a prefix skips the original method. |
 | Overloads | in `static_call`, `call` and `patch`, name the exact one with its parameter types: `"SetSimulationSpeed(double, bool)"` |
 | ImGui | `begin(title)` / `end()`, `text`, `button`, `checkbox(label, v) -> v`, `slider(label, v, min, max) -> v`, `same_line`, `separator`, `header` |

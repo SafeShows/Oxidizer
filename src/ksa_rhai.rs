@@ -261,7 +261,15 @@ pub fn register(engine: &mut Engine) -> usize {
                             &mut instance,
                             obj_and(1),
                             method(move |o, args| {
-                                o.0.set(&cs, &to_obj(&args[0]));
+                                let v = to_obj(&args[0]);
+                                // After a method call on a property (`v.parent.get(..)`), Rhai writes the property
+                                // back, even read-only ones: one setter serves every type with a member of this
+                                // name. Writing back an unchanged value is skipped.
+                                let cur = o.0.get(&cs);
+                                let same = if cur.is_null() { v.is_null() } else { cur.call("Equals", &[&*v]).f64() == Some(1.0) };
+                                if !same {
+                                    o.0.set(&cs, &v);
+                                }
                                 Dynamic::UNIT
                             }),
                         );

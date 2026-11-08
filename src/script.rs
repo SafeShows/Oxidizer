@@ -300,11 +300,12 @@ fn engine() -> Engine {
         .register_fn("static_call", |ty: &str, m: &str| RObj::new(Obj::static_call(ty, m, &[])))
         .register_fn("get", |o: &mut RObj, m: &str| RObj::new(o.0.get(m)))
         .register_fn("set", |o: &mut RObj, m: &str, v: Dynamic| o.0.set(m, &to_obj(&v)))
-        .register_fn("call", |o: &mut RObj, m: &str, a: Array| {
+        // `invoke`, not `call`: Rhai keeps `x.call(...)` for function pointers.
+        .register_fn("invoke", |o: &mut RObj, m: &str, a: Array| {
             let a = args(&a);
             RObj::new(o.0.call(m, &refs(&a)))
         })
-        .register_fn("call", |o: &mut RObj, m: &str| RObj::new(o.0.call(m, &[])))
+        .register_fn("invoke", |o: &mut RObj, m: &str| RObj::new(o.0.call(m, &[])))
         .register_fn("float", |o: &mut RObj| o.0.f64().map_or(Dynamic::UNIT, Dynamic::from))
         .register_fn("is_null", |o: &mut RObj| o.0.is_null())
         .register_fn("len", |o: &mut RObj| o.0.len().map_or(-1, |n| n as i64))

@@ -5,6 +5,13 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ## [Unreleased]
 
+## [0.6.2] - 2026-11-08
+
+### Fixed
+
+- Rhai: calling a game method by name is now `obj.invoke(method[, args])`. The documented `obj.call(...)` never worked, because Rhai keeps `x.call(...)` for function pointers ("Data type incorrect: string (expecting Fn)").
+- Rhai: a method call on a game property (`vehicle.parent.get("MeanRadius")`) no longer logs "Property set method not found". Rhai writes such properties back afterwards; an unchanged value is no longer written.
+
 ## [0.6.1] - 2026-11-07
 
 ### Added
@@ -112,7 +119,8 @@ First release.
 - When a method has several overloads, `call` and patching use the first one with a matching number of arguments.
 - Hooks can't read or change a patched method's return value.
 
-[Unreleased]: https://github.com/SafeShows/Oxidizer/compare/v0.6.1...HEAD
+[Unreleased]: https://github.com/SafeShows/Oxidizer/compare/v0.6.2...HEAD
+[0.6.2]: https://github.com/SafeShows/Oxidizer/compare/v0.6.1...v0.6.2
 [0.6.1]: https://github.com/SafeShows/Oxidizer/compare/v0.6.0...v0.6.1
 [0.6.0]: https://github.com/SafeShows/Oxidizer/compare/v0.5.1...v0.6.0
 [0.5.1]: https://github.com/SafeShows/Oxidizer/compare/v0.5.0...v0.5.1
