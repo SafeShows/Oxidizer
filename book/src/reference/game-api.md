@@ -1,3 +1,9 @@
+---
+hide:
+  - navigation
+  - toc
+---
+
 # Game API
 
 Every public type and member of the game (`KSA.dll`) that mods can use, as [`oxidizer --bindgen`](../rust/bindings.md) generates them: the C# member, the typed Rust binding, and how to reach it from Rhai.
