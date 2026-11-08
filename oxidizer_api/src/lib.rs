@@ -11,14 +11,21 @@ use std::fmt;
 use std::sync::OnceLock;
 
 pub mod bind;
+pub mod bus;
 pub mod imgui;
+
+pub use bus::{Event, Service, Subscription, call, call_json, provide, provide_json, publish, publish_json, publish_retained, publish_retained_json, subscribe, subscribe_json};
+/// Re-exported for `#[derive(Serialize, Deserialize)]` on event and service types (`oxidizer_api::serde`).
+pub use serde;
+pub use serde_json;
 
 /// ABI version of [`Api`] and the mod exports. Bump when the table grows or changes;
 /// the loader runs mods built for its version or an older one, and refuses newer ones.
 /// Version 2 added hook results, keys, typed-binding calls and 64-bit integers.
 /// Version 3 added reading the log and mod status, and running Rhai code.
 /// Version 4 added `Mod::loaded`.
-pub const API_VERSION: u32 = 4;
+/// Version 5 added the event bus and services, and gave each mod its own table with its id.
+pub const API_VERSION: u32 = 5;
 
 /// .NET GCHandle. 0 = null.
 pub type Handle = usize;
@@ -74,7 +81,35 @@ pub struct Api {
     /// Run Rhai code in Oxidizer's script engine: 1 when it ran; [`Api::rhai_result`] then has the value, else the error.
     pub rhai_eval: extern "C" fn(*const u8, usize) -> u8,
     pub rhai_result: extern "C" fn(*mut u8, usize) -> usize,
+    // ---- API version 5 (filled by the loader) ----
+    /// The id (folder name) of the mod this table was given to: each Rust mod gets its own copy of the table.
+    /// Empty in the loader's own table.
+    pub mod_id: *const u8,
+    pub mod_id_len: usize,
+    /// The text of the last bus or service call on this thread that failed (the error), or a service call's result.
+    pub last_text: extern "C" fn(*mut u8, usize) -> usize,
+    /// (caller, topic, JSON value, retained) -> 1 when queued.
+    pub bus_publish: extern "C" fn(*const u8, usize, *const u8, usize, *const u8, usize, u8) -> u8,
+    /// (caller, topic, callback, user) -> subscription id, or 0 on error.
+    pub bus_subscribe: extern "C" fn(*const u8, usize, *const u8, usize, BusFn, usize) -> u64,
+    pub bus_unsubscribe: extern "C" fn(u64),
+    /// (caller, service name, callback, user) -> 1 when provided.
+    pub service_provide: extern "C" fn(*const u8, usize, *const u8, usize, ServiceFn, usize) -> u8,
+    /// Inside a service callback: its JSON result, or the error when the callback returns 0.
+    pub service_reply: extern "C" fn(*const u8, usize),
+    /// (caller, service name, JSON arguments) -> 1 when it returned; `last_text` then has the JSON result, else the error.
+    pub service_call: extern "C" fn(*const u8, usize, *const u8, usize, *const u8, usize) -> u8,
 }
+
+// The table only holds function pointers and a pointer to a string that lives as long as the process.
+unsafe impl Send for Api {}
+unsafe impl Sync for Api {}
+
+/// Event callback: (user data, JSON value, its length).
+pub type BusFn = extern "C" fn(user: usize, json: *const u8, len: usize);
+/// Service callback: (user data, JSON arguments, their length) -> 1 when it worked. It sets its result (or error)
+/// with [`Api::service_reply`].
+pub type ServiceFn = extern "C" fn(user: usize, args: *const u8, len: usize) -> u8;
 
 static API: OnceLock<&'static Api> = OnceLock::new();
 

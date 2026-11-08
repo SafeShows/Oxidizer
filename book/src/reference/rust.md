@@ -1,6 +1,6 @@
 # Rust API reference
 
-Everything in the [`oxidizer_api`](https://crates.io/crates/oxidizer_api) crate, version 0.5 (Oxidizer 0.8 and later; `Mod::loaded` is new in 0.5, the rest is in 0.4 and Oxidizer 0.7). The same items, with their doc comments, are on [docs.rs](https://docs.rs/oxidizer_api).
+Everything in the [`oxidizer_api`](https://crates.io/crates/oxidizer_api) crate, version 0.6 (Oxidizer 0.9 and later; events and services are new in 0.6, `Mod::loaded` in 0.5, the rest is in 0.4 and Oxidizer 0.7). The same items, with their doc comments, are on [docs.rs](https://docs.rs/oxidizer_api).
 
 ## The mod
 
@@ -8,7 +8,7 @@ Everything in the [`oxidizer_api`](https://crates.io/crates/oxidizer_api) crate,
 |---|---|
 | `trait Mod: Send + 'static` | Your mod. `fn init() -> Self` is required (runs before the game's `Main`); `fn loaded(&mut self)` (the game has loaded its content and mods), `fn frame(&mut self, player_time: f64, dt: f64)`, `fn gui(&mut self, dt: f64)`, `fn menu(&mut self)`, `fn unload(&mut self)` are optional. See [The Mod trait](../rust/mod-trait.md). |
 | `oxidizer_mod!(Type)` | Registers `Type` as the library's mod: exports the functions Oxidizer calls and catches panics in them. Once per library. |
-| `const API_VERSION: u32` | The API version the crate is built for (4 in 0.5). Oxidizer refuses mods built for a newer version than it has. |
+| `const API_VERSION: u32` | The API version the crate is built for (5 in 0.6). Oxidizer refuses mods built for a newer version than it has. |
 
 ## Game objects: `Obj`
 
@@ -94,6 +94,24 @@ The game's own ImGui. Only valid inside `Mod::gui` (menu functions inside `Mod::
 | `struct TextBuffer` | Text edited by the text fields: `TextBuffer::new(s)`, `default()`, `.set(s)`, `.as_str()`. It keeps 64 KiB of spare room, the most one paste can add. |
 | `text_flags::ALLOW_TAB_INPUT`, `ENTER_RETURNS_TRUE`, `READ_ONLY` | Flags for the text fields, combined with `\|`. |
 | `tab_flags::UNSAVED_DOCUMENT`, `SET_SELECTED` | Flags for tabs. |
+
+## Events and services
+
+Names start with the owning mod's id; only that mod publishes on or provides them. See [Events and services](../events.md). 0.6+ (Oxidizer 0.9).
+
+| Item | |
+|---|---|
+| `trait Event: Serialize + DeserializeOwned` | A typed event: `const TOPIC: &'static str`. |
+| `publish<E: Event>(&E) -> Result<(), String>` | Sends the event to the topic's subscribers, at the start of the next frame. |
+| `publish_retained<E: Event>(&E) -> Result<(), String>` | The same, and keeps it as the topic's current value for later subscribers. |
+| `subscribe<E: Event>(impl Fn(E)) -> Result<Subscription, String>` | Calls the closure for each event (and the retained value, if any). Values that don't fit `E` are logged and skipped. |
+| `struct Subscription` | Unsubscribes when dropped; `.forever()` keeps it for the rest of the game. |
+| `trait Service` | A typed service: `const NAME: &'static str`, `type Args`, `type Out` (serde types). |
+| `provide<S: Service>(impl Fn(S::Args) -> Result<S::Out, String>) -> Result<(), String>` | Provides the service; providing it again replaces it. |
+| `call<S: Service>(&S::Args) -> Result<S::Out, String>` | Calls the service and returns its value, or the error. |
+| `publish_json`, `publish_retained_json`, `subscribe_json`, `provide_json`, `call_json` | The same with JSON text, for names and shapes not known at compile time. |
+| `bus::mod_id() -> &'static str` | This mod's id. |
+| `serde`, `serde_json` | Re-exported; derive with `#[serde(crate = "oxidizer_api::serde")]`. |
 
 ## `bind`
 

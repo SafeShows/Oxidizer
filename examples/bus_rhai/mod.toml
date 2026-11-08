@@ -1,0 +1,7 @@
+name = "bus_rhai"
+
+[oxidizer]
+script = "main.rhai"
+version = "0.1.0"
+# Uses bus_rust's add service, so it starts after it.
+dependencies = [{ id = "bus_rust", optional = true }]

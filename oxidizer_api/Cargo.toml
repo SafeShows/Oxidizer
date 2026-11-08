@@ -1,6 +1,6 @@
 [package]
 name = "oxidizer_api"
-version = "0.5.0"
+version = "0.6.0"
 edition = "2024"
 description = "API for writing Kitten Space Agency mods in Rust, loaded by the Oxidizer mod loader"
 license = "MIT"
@@ -10,4 +10,6 @@ keywords = ["ksa", "kitten-space-agency", "modding", "gamedev"]
 categories = ["game-development", "api-bindings"]
 
 [dependencies]
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
 libloading = "0.9.0"

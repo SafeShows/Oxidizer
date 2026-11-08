@@ -109,6 +109,7 @@ Also in `oxidizer_api`:
 - `key_pressed("F5")` is true on the frame a key was pressed, `key_down("F5")` while it's held. Names are the game's key names (`"K"`, `"F5"`, `"Space"`, `"LeftShift"`, ...). Keys typed into text fields or the console, or eaten by a dialog, don't count.
 - `config_path("my_mod")` is where to keep your settings: `<documents>/oxidizer/my_mod.toml`, outside the mod folder so updating the mod doesn't lose them.
 - `log_lines(from)` / `log_next()` read Oxidizer's log, `mod_statuses()` says which mods run and why others don't, and `rhai_eval(code)` runs Rhai against the live game with the access Rhai mods have (variables persist between calls). `mods_dir()` is the game's mods folder. (Oxidizer 0.7.0 or later.)
+- Events and services between mods (Rust and Rhai): `publish` / `subscribe` typed `Event`s, `provide` / `call` typed `Service`s. See [Events and services](https://safeshows.github.io/Oxidizer/events/). (Oxidizer 0.9.0 or later.)
 - `imgui` has text fields (`input_text`, `input_text_multiline` with a `TextBuffer`), tabs (`begin_tab_bar`, `begin_tab_item`) and `ctrl_shortcut('s')`, which also sees keys typed into a text field.
 
 #### Typed bindings
@@ -158,6 +159,7 @@ Scripts reload while the game runs: save the file and the new code takes over wi
 | Return values (in a hook) | `result()`, `set_result(v)`: read or replace the hooked method's return value |
 | Keys | `key_pressed(name)` (this frame), `key_down(name)` (held), e.g. `key_pressed("F5")` |
 | Settings | `config_get(key, default)`, `config_set(key, value)` for bools, numbers and strings, saved to `<documents>/oxidizer/<mod>.toml` |
+| Events and services | `publish(topic, v)`, `publish_retained(topic, v)`, `subscribe(topic, "fn")`, `unsubscribe`, `provide(name, "fn")`, `call_service(name[, args])`; names start with your mod's id (0.9+) |
 | Logging | `print(...)` |
 
 ## Notes and limits

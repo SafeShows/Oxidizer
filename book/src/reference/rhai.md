@@ -1,6 +1,6 @@
 # Rhai API reference
 
-Everything Oxidizer adds to Rhai, as of Oxidizer 0.7. The language itself (variables, strings, arrays, maps, loops, Rhai's built-in functions) is in the [Rhai book](https://rhai.rs/book/).
+Everything Oxidizer adds to Rhai, as of Oxidizer 0.9. The language itself (variables, strings, arrays, maps, loops, Rhai's built-in functions) is in the [Rhai book](https://rhai.rs/book/).
 
 Types below are written as Rhai sees them: `int`, `float`, `bool`, `String`, `Array`, `()` (nothing), `Obj` (a game object), and `?` for any value.
 
@@ -108,6 +108,22 @@ See [Hooks](../rhai/hooks.md).
 | `menu_item(label: String, selected: bool)` | `bool` | An entry with a check mark while `selected`. |
 | `begin_menu(label: String)` | `bool` | A submenu; call `end_menu()` only when it returned true. |
 | `end_menu()` | `()` | Ends the submenu. |
+
+## Events and services
+
+Names start with the owning mod's id; only that mod publishes on or provides them. See [Events and services](../events.md). 0.9+.
+
+| Function | Returns | Does |
+|---|---|---|
+| `publish(topic: String, value: ?)` | `()` | Sends `value` to the topic's subscribers, at the start of the next frame. |
+| `publish_retained(topic: String, value: ?)` | `()` | The same, and keeps it as the topic's current value for later subscribers. |
+| `subscribe(topic: String, function: String)` | `()` | Calls `function(value)` in this script for each event on the topic (and the retained value, if any). Once per topic and function. |
+| `unsubscribe(topic: String, function: String)` | `()` | Stops that. |
+| `provide(name: String, function: String)` | `()` | Lets other mods call `function(args)` in this script as the service `name`; its return value is the result. |
+| `call_service(name: String, args: ?)` | `?` | Calls a service and returns its value; throws its error. |
+| `call_service(name: String)` | `?` | The same, with `()` as the arguments. |
+
+Values are numbers, strings, bools, arrays and object maps (they cross as JSON). `subscribe` and `provide` work in a script, not in the console.
 
 ## Output
 

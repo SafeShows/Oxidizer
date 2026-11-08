@@ -46,6 +46,7 @@ markdown_extensions:
   - pymdownx.inlinehilite
   - pymdownx.superfences
   - pymdownx.details
+  - pymdownx.tabbed: { alternate_style: true }
 
 extra_css:
   - assets/game-api.css
@@ -73,6 +74,7 @@ nav:
       - Windows and menus: rust/ui.md
       - Hooks: rust/hooks.md
       - Keys, settings and more: rust/more.md
+  - Events and services: events.md
   - Reference:
       - Rhai API: reference/rhai.md
       - Rust API: reference/rust.md

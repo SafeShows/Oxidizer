@@ -5,6 +5,7 @@
 //!
 //! Either way the bridge's `Init` is handed in, the Api table is filled, and the mods are loaded.
 
+mod bus;
 mod ksa_rhai;
 mod mods;
 mod script;
@@ -69,7 +70,7 @@ extern "C" fn api_log(p: *const u8, n: usize) {
 }
 
 /// Copies `s` into a caller's buffer (up to `cap` bytes) and returns its full length, as `read_string` expects.
-fn write_out(s: &str, buf: *mut u8, cap: usize) -> usize {
+pub(crate) fn write_out(s: &str, buf: *mut u8, cap: usize) -> usize {
     let n = s.len().min(cap);
     unsafe { std::ptr::copy_nonoverlapping(s.as_ptr(), buf, n) };
     s.len()
@@ -120,6 +121,7 @@ extern "C" fn on_loaded() {
 
 extern "C" fn on_frame(t: f64, dt: f64) {
     script::reload_changed();
+    bus::deliver(); // events published since the last frame, before mods' frame()
     for m in RUST_MODS.get().into_iter().flatten() {
         m.frame.map(|f| f(t, dt));
     }
@@ -168,6 +170,16 @@ pub unsafe fn attach(bridge_init: BridgeInit, instance: &str) -> Result<(), Stri
         (&raw mut (*p).mod_status).write(api_mod_status);
         (&raw mut (*p).rhai_eval).write(api_rhai_eval);
         (&raw mut (*p).rhai_result).write(api_rhai_result);
+        // API version 5: the bus and services. The loader's own table has no mod id; each Rust mod gets a copy with its own.
+        (&raw mut (*p).mod_id).write(std::ptr::null());
+        (&raw mut (*p).mod_id_len).write(0);
+        (&raw mut (*p).last_text).write(bus::api_last_text);
+        (&raw mut (*p).bus_publish).write(bus::api_publish);
+        (&raw mut (*p).bus_subscribe).write(bus::api_subscribe);
+        (&raw mut (*p).bus_unsubscribe).write(bus::api_unsubscribe);
+        (&raw mut (*p).service_provide).write(bus::api_provide);
+        (&raw mut (*p).service_reply).write(bus::api_reply);
+        (&raw mut (*p).service_call).write(bus::api_call);
         let api: &'static Api = api.assume_init_ref();
         oxidizer_api::set_api(api);
         load_mods(api);
@@ -237,7 +249,7 @@ fn load_mods(api: &'static Api) {
         }
         let mut ok = true;
         if let Some(dll) = &e.dll {
-            match unsafe { load_rust_mod(&mod_library(&e.dir, dll), api) } {
+            match unsafe { load_rust_mod(&mod_library(&e.dir, dll), api, &e.id) } {
                 Ok(m) => {
                     log(&format!("loaded rust mod {}", e.id));
                     ui::set_status(&e.id, "Rust", None);
@@ -272,7 +284,9 @@ fn mod_library(dir: &Path, dll: &str) -> PathBuf {
     folder.join(libloading::library_filename(stem))
 }
 
-unsafe fn load_rust_mod(path: &Path, api: &'static Api) -> Result<RustMod, Box<dyn std::error::Error>> {
+/// Loads a Rust mod and runs its init, giving it its own copy of the API table with its id, so the bus knows who
+/// calls (also from hooks, outside any Oxidizer callback).
+unsafe fn load_rust_mod(path: &Path, api: &'static Api, id: &str) -> Result<RustMod, Box<dyn std::error::Error>> {
     unsafe {
         let lib = Library::new(path)?;
         let version: extern "C" fn() -> u32 = *lib.get(b"oxidizer_api_version\0")?;
@@ -289,7 +303,11 @@ unsafe fn load_rust_mod(path: &Path, api: &'static Api) -> Result<RustMod, Box<d
             loaded: lib.get(b"oxidizer_loaded\0").ok().map(|s| *s),
         };
         std::mem::forget(lib); // mods stay loaded for the process lifetime (hooks may point into them)
-        init(api);
+        let id: &'static str = Box::leak(id.into());
+        let mut table = std::ptr::read(api);
+        table.mod_id = id.as_ptr();
+        table.mod_id_len = id.len();
+        init(Box::leak(Box::new(table)));
         Ok(m)
     }
 }

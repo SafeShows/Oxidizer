@@ -96,6 +96,7 @@ pub fn draw() {
             }
         }
         imgui::separator();
+        draw_bus();
         imgui::text("Log");
         imgui::begin_child("oxidizer_log", 0.0);
         for line in &log {
@@ -108,4 +109,37 @@ pub fn draw() {
     if !open {
         SHOW.store(false, Ordering::Relaxed);
     }
+}
+
+/// What mods say to each other: topics with their subscribers and retained values, recent events, services.
+fn draw_bus() {
+    if !imgui::collapsing_header("Event bus") {
+        return;
+    }
+    let b = crate::bus::snapshot();
+    let short = |s: &str| if s.chars().count() > 80 { format!("{}...", s.chars().take(80).collect::<String>()) } else { s.to_string() };
+    if b.topics.is_empty() && b.services.is_empty() {
+        imgui::text_colored(GRAY, "No events or services yet.");
+    }
+    for (topic, subs, retained) in &b.topics {
+        imgui::text(&format!("{topic}  ({subs} subscriber{})", if *subs == 1 { "" } else { "s" }));
+        if let Some(v) = retained {
+            imgui::same_line();
+            imgui::text_colored(GRAY, &format!("now {}", short(v)));
+        }
+    }
+    if !b.services.is_empty() {
+        imgui::text("Services:");
+        for name in &b.services {
+            imgui::same_line();
+            imgui::text_colored(GREEN, name);
+        }
+    }
+    if !b.recent.is_empty() {
+        imgui::text("Recent events:");
+        for (topic, value) in b.recent.iter().take(8) {
+            imgui::text_colored(GRAY, &format!("  {topic} {}", short(value)));
+        }
+    }
+    imgui::separator();
 }

@@ -1,0 +1,5 @@
+name = "bus_rust"
+
+[oxidizer]
+dll = "bin/bus_rust"
+version = "0.1.0"

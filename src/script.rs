@@ -196,6 +196,58 @@ fn start_new() {
     }
 }
 
+// ---- the event bus and services (see bus.rs) ----
+
+fn index_of(script: &str) -> Option<usize> {
+    SCRIPTS.get()?.names.lock().unwrap_or_else(|e| e.into_inner()).iter().position(|n| n == script)
+}
+
+/// The mod whose code runs on this thread: a script mod's id, or "console" for the console.
+fn caller_name() -> Option<String> {
+    let i = CURRENT.get();
+    if i == usize::MAX {
+        return Some("console".into());
+    }
+    SCRIPTS.get()?.names.lock().unwrap_or_else(|e| e.into_inner()).get(i).cloned()
+}
+
+fn json_to_dyn(json: &str) -> Dynamic {
+    serde_json::from_str::<serde_json::Value>(json).ok().and_then(|v| rhai::serde::to_dynamic(v).ok()).unwrap_or(Dynamic::UNIT)
+}
+
+fn dyn_to_json(d: &Dynamic) -> Result<String, String> {
+    rhai::serde::from_dynamic::<serde_json::Value>(d)
+        .map(|v| v.to_string())
+        .map_err(|e| format!("only plain values (numbers, strings, bools, arrays, maps) can be sent: {e}"))
+}
+
+/// Gives a script its event. Its error stops the script, like an error in frame().
+pub fn deliver_event(script: &str, function: &str, json: &str) {
+    let (Some(s), Some(i)) = (SCRIPTS.get(), index_of(script)) else { return };
+    let Some(m) = mods().get(i).cloned() else { return };
+    let Some(mut m) = lock(&m) else {
+        log(&format!("{script}: busy, missed an event for {function}"));
+        return;
+    };
+    call(&s.engine, i, &mut m, function, (json_to_dyn(json),));
+}
+
+/// Runs a script's service function: its result as JSON, or the error (which doesn't stop the script).
+pub fn call_service(script: &str, function: &str, args: &str) -> Result<String, String> {
+    let (Some(s), Some(i)) = (SCRIPTS.get(), index_of(script)) else { return Err(format!("{script} isn't loaded")) };
+    let m = mods().get(i).cloned().ok_or_else(|| format!("{script} isn't loaded"))?;
+    let mut m = lock(&m).ok_or_else(|| format!("{script} is busy (running further up this call)"))?;
+    if m.dead {
+        return Err(format!("{script} has stopped after an error"));
+    }
+    let outer = CURRENT.replace(i);
+    let m = &mut *m;
+    let opts = CallFnOptions::new().eval_ast(false).bind_this_ptr(&mut m.this);
+    let result = s.engine.call_fn_with_options::<Dynamic>(opts, &mut m.scope, &m.ast, function, (json_to_dyn(args),));
+    CURRENT.set(outer);
+    dyn_to_json(&result.map_err(|e| e.to_string())?)
+}
+
 /// Runs Rhai code like a console line: variables persist between calls, `print` goes to the log.
 /// Returns the value as text (empty for `()`), or the error.
 pub fn eval(code: &str) -> Result<String, String> {
@@ -411,6 +463,36 @@ fn engine() -> Engine {
     // inside a hook: the hooked method's return value; set_result replaces it
     e.register_fn("result", || RObj::new(oxidizer_api::hook_result()))
         .register_fn("set_result", |v: Dynamic| oxidizer_api::set_hook_result(&to_obj(&v)));
+
+    // the event bus and services: names start with this mod's id; values are plain Rhai values (maps, arrays, ...)
+    let who = || caller_name().ok_or_else(|| Box::<EvalAltResult>::from("no mod is running"));
+    let script_who = move || match caller_name() {
+        Some(n) if n != "console" => Ok(n),
+        _ => Err(Box::<EvalAltResult>::from("subscribe and provide only work from a mod's script")),
+    };
+    e.register_fn("publish", move |t: &str, v: Dynamic| -> Result<(), Box<EvalAltResult>> {
+        Ok(crate::bus::publish(&who()?, t, &dyn_to_json(&v)?, false)?)
+    })
+    .register_fn("publish_retained", move |t: &str, v: Dynamic| -> Result<(), Box<EvalAltResult>> {
+        Ok(crate::bus::publish(&who()?, t, &dyn_to_json(&v)?, true)?)
+    })
+    .register_fn("subscribe", move |t: &str, f: &str| -> Result<(), Box<EvalAltResult>> {
+        crate::bus::subscribe(t, crate::bus::Target::Rhai { script: script_who()?, function: f.into() })?;
+        Ok(())
+    })
+    .register_fn("unsubscribe", move |t: &str, f: &str| -> Result<(), Box<EvalAltResult>> {
+        crate::bus::unsubscribe_target(t, &crate::bus::Target::Rhai { script: script_who()?, function: f.into() });
+        Ok(())
+    })
+    .register_fn("provide", move |n: &str, f: &str| -> Result<(), Box<EvalAltResult>> {
+        Ok(crate::bus::provide(&script_who()?, n, crate::bus::Provider::Rhai { script: script_who()?, function: f.into() })?)
+    })
+    .register_fn("call_service", |n: &str, args: Dynamic| -> Result<Dynamic, Box<EvalAltResult>> {
+        Ok(json_to_dyn(&crate::bus::call(n, &dyn_to_json(&args)?)?))
+    })
+    .register_fn("call_service", |n: &str| -> Result<Dynamic, Box<EvalAltResult>> {
+        Ok(json_to_dyn(&crate::bus::call(n, "null")?))
+    });
 
     // keys, by the game's key names ("F5", "K", "Space"); pressed = this frame only
     e.register_fn("key_pressed", |k: &str| oxidizer_api::key_pressed(k))

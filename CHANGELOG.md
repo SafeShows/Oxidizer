@@ -5,6 +5,11 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ## [Unreleased]
 
+### Added
+
+- Events and services between mods, Rust and Rhai alike. Events: `publish`, `publish_retained` (kept as the topic's current value for later subscribers) and `subscribe`, delivered at the start of the next frame. Services: `provide` and `call_service` / `call`, which return a value. Names start with the owning mod's id, and only that mod publishes on or provides them. Values are JSON: maps in Rhai, serde types in Rust (`Event` and `Service` traits). **Mods > Oxidizer** has an **Event bus** section. Examples: `bus_rust` and `bus_rhai`.
+- `oxidizer_api` 0.6.0 (API version 5): the bus and services. Each Rust mod gets its own API table, which carries its id. Mods built with older versions keep working.
+
 ## [0.8.0] - 2026-11-08
 
 ### Added
