@@ -5,6 +5,8 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ## [Unreleased]
 
+## [0.8.0] - 2026-11-08
+
 ### Added
 
 - `loaded()`: a callback once the game has loaded its content and mods (after `KSA.ModLibrary.LoadAll`, the moment of StarMap's `AllModsLoaded`), for Rhai (`fn loaded()`) and Rust (`Mod::loaded`, `oxidizer_api` 0.5, API version 4). `init` stays where it was, before the game's `Main`. A Rhai mod that starts later gets `loaded()` right after `init()`.
@@ -144,7 +146,8 @@ First release.
 - When a method has several overloads, `call` and patching use the first one with a matching number of arguments.
 - Hooks can't read or change a patched method's return value.
 
-[Unreleased]: https://github.com/SafeShows/Oxidizer/compare/v0.7.0...HEAD
+[Unreleased]: https://github.com/SafeShows/Oxidizer/compare/v0.8.0...HEAD
+[0.8.0]: https://github.com/SafeShows/Oxidizer/compare/v0.7.0...v0.8.0
 [0.7.0]: https://github.com/SafeShows/Oxidizer/compare/v0.6.3...v0.7.0
 [0.6.3]: https://github.com/SafeShows/Oxidizer/compare/v0.6.2...v0.6.3
 [0.6.2]: https://github.com/SafeShows/Oxidizer/compare/v0.6.1...v0.6.2
