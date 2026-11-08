@@ -53,7 +53,7 @@ extra_javascript:
   - assets/game-api.js
 
 nav:
-  - Introduction: introduction.md
+  - Introduction: index.md
   - Getting started:
       - Installing Oxidizer: install.md
       - How mods are found: mod-folders.md
