@@ -6,7 +6,7 @@
 
 use crate::{log, ui};
 use oxidizer_api::{Handle, Obj, imgui};
-use rhai::{Array, CallFnOptions, Dynamic, Engine, EvalAltResult, FuncArgs, Map, Scope, AST};
+use rhai::{Array, CallFnOptions, Dynamic, Engine, EvalAltResult, FuncArgs, FuncRegistration, Map, RhaiNativeFunc, Scope, Variant, AST};
 use std::cell::Cell;
 use std::collections::HashSet;
 use std::fs;
@@ -425,6 +425,30 @@ fn refs(v: &[Arc<Obj>]) -> Vec<&Obj> {
     v.iter().map(|o| &**o).collect()
 }
 
+/// `register_fn` with what editors show: parameter names and types (then the return type), and a doc line.
+trait Def {
+    fn def<A: 'static, const N: usize, const X: bool, R: Variant + Clone, const F: bool>(
+        &mut self,
+        name: &str,
+        info: &[&str],
+        doc: &str,
+        f: impl RhaiNativeFunc<A, N, X, R, F> + Send + Sync + 'static,
+    ) -> &mut Self;
+}
+
+impl Def for Engine {
+    fn def<A: 'static, const N: usize, const X: bool, R: Variant + Clone, const F: bool>(
+        &mut self,
+        name: &str,
+        info: &[&str],
+        doc: &str,
+        f: impl RhaiNativeFunc<A, N, X, R, F> + Send + Sync + 'static,
+    ) -> &mut Self {
+        FuncRegistration::new(name).with_params_info(info).with_comments([format!("/// {doc}")]).register_into_engine(self, f);
+        self
+    }
+}
+
 fn engine() -> Engine {
     let mut e = Engine::new();
     e.on_print(|s| log(s));
@@ -432,37 +456,41 @@ fn engine() -> Engine {
 
     // game objects
     e.register_type_with_name::<RObj>("Obj")
-        .register_fn("static_get", |ty: &str, m: &str| RObj::new(Obj::static_get(ty, m)))
-        .register_fn("static_set", |ty: &str, m: &str, v: Dynamic| Obj::static_set(ty, m, &to_obj(&v)))
-        .register_fn("static_call", |ty: &str, m: &str, a: Array| {
+        .def("static_get", &["type_name: string", "member: string", "Obj"], "A static property or field of a game type, by name: `static_get(\"KSA.Program\", \"ControlledVehicle\")`.", |ty: &str, m: &str| RObj::new(Obj::static_get(ty, m)))
+        .def("static_set", &["type_name: string", "member: string", "value: ?", "bool"], "Sets a static property or field of a game type; false if that failed.", |ty: &str, m: &str, v: Dynamic| Obj::static_set(ty, m, &to_obj(&v)))
+        .def("static_call", &["type_name: string", "method: string", "args: array", "Obj"], "Calls a static method of a game type. The method can name its parameter types: `\"SetSimulationSpeed(double, bool)\"`.", |ty: &str, m: &str, a: Array| {
             let a = args(&a);
             RObj::new(Obj::static_call(ty, m, &refs(&a)))
         })
-        .register_fn("static_call", |ty: &str, m: &str| RObj::new(Obj::static_call(ty, m, &[])))
-        .register_fn("get", |o: &mut RObj, m: &str| RObj::new(o.0.get(m)))
-        .register_fn("set", |o: &mut RObj, m: &str, v: Dynamic| o.0.set(m, &to_obj(&v)))
+        .def("static_call", &["type_name: string", "method: string", "Obj"], "Calls a static method of a game type that takes no arguments.", |ty: &str, m: &str| RObj::new(Obj::static_call(ty, m, &[])))
+        .def("get", &["obj: Obj", "member: string", "Obj"], "A property or field of a game object, by name.", |o: &mut RObj, m: &str| RObj::new(o.0.get(m)))
+        .def("set", &["obj: Obj", "member: string", "value: ?", "bool"], "Sets a property or field of a game object; false if that failed.", |o: &mut RObj, m: &str, v: Dynamic| o.0.set(m, &to_obj(&v)))
         // `invoke`, not `call`: Rhai keeps `x.call(...)` for function pointers.
-        .register_fn("invoke", |o: &mut RObj, m: &str, a: Array| {
+        .def("invoke", &["obj: Obj", "method: string", "args: array", "Obj"], "Calls a method of a game object, by name.", |o: &mut RObj, m: &str, a: Array| {
             let a = args(&a);
             RObj::new(o.0.call(m, &refs(&a)))
         })
-        .register_fn("invoke", |o: &mut RObj, m: &str| RObj::new(o.0.call(m, &[])))
-        .register_fn("float", |o: &mut RObj| o.0.f64().map_or(Dynamic::UNIT, Dynamic::from))
-        .register_fn("is_null", |o: &mut RObj| o.0.is_null())
-        .register_fn("len", |o: &mut RObj| o.0.len().map_or(-1, |n| n as i64))
-        .register_indexer_get(|o: &mut RObj, i: i64| RObj::new(o.0.index(i as usize)))
-        .register_fn("to_string", |o: &mut RObj| o.0.to_string())
-        .register_fn("to_debug", |o: &mut RObj| o.0.to_string());
+        .def("invoke", &["obj: Obj", "method: string", "Obj"], "Calls a method of a game object that takes no arguments.", |o: &mut RObj, m: &str| RObj::new(o.0.call(m, &[])))
+        .def("float", &["obj: Obj", "?"], "The object as a number, or () if it isn't one.", |o: &mut RObj| o.0.f64().map_or(Dynamic::UNIT, Dynamic::from))
+        .def("is_null", &["obj: Obj", "bool"], "Whether the object is null (nothing).", |o: &mut RObj| o.0.is_null())
+        .def("len", &["obj: Obj", "int"], "The number of items in a game collection, or -1 if it isn't one.", |o: &mut RObj| o.0.len().map_or(-1, |n| n as i64))
+        .def("to_string", &["obj: Obj", "string"], "The object as text (its C# ToString).", |o: &mut RObj| o.0.to_string())
+        .def("to_debug", &["obj: Obj", "string"], "The object as text (its C# ToString).", |o: &mut RObj| o.0.to_string());
+    FuncRegistration::new_index_getter()
+        .with_params_info(["obj: Obj", "index: int", "Obj"])
+        .with_comments(["/// An item of a game collection: `obj[0]`."])
+        .register_into_engine(&mut e, |o: &mut RObj, i: i64| RObj::new(o.0.index(i as usize)));
 
-    // patch("KSA.Vehicle", "SetEnum", "prefix" | "postfix", "my_fn") -> my_fn(instance, args) returns false to skip original
-    e.register_fn("patch", |ty: &str, m: &str, kind: &str, f: &str| {
-        let user = Box::leak(Box::new((CURRENT.get(), f.to_string()))) as *const _ as usize;
-        oxidizer_api::patch(ty, m, kind == "postfix", hook_tramp, user)
-    });
+    e.def("patch", &["type_name: string", "method: string", "kind: string", "function: string", "bool"],
+        "Hooks a game method: kind is \"prefix\" or \"postfix\", and `function(instance, args)` in this script runs before or after it; a prefix that returns false skips the original.",
+        |ty: &str, m: &str, kind: &str, f: &str| {
+            let user = Box::leak(Box::new((CURRENT.get(), f.to_string()))) as *const _ as usize;
+            oxidizer_api::patch(ty, m, kind == "postfix", hook_tramp, user)
+        });
 
     // inside a hook: the hooked method's return value; set_result replaces it
-    e.register_fn("result", || RObj::new(oxidizer_api::hook_result()))
-        .register_fn("set_result", |v: Dynamic| oxidizer_api::set_hook_result(&to_obj(&v)));
+    e.def("result", &["Obj"], "Inside a hook: the hooked method's return value.", || RObj::new(oxidizer_api::hook_result()))
+        .def("set_result", &["value: ?", "bool"], "Inside a hook: replaces the hooked method's return value.", |v: Dynamic| oxidizer_api::set_hook_result(&to_obj(&v)));
 
     // the event bus and services: names start with this mod's id; values are plain Rhai values (maps, arrays, ...)
     let who = || caller_name().ok_or_else(|| Box::<EvalAltResult>::from("no mod is running"));
@@ -470,78 +498,100 @@ fn engine() -> Engine {
         Some(n) if n != "console" => Ok(n),
         _ => Err(Box::<EvalAltResult>::from("subscribe and provide only work from a mod's script")),
     };
-    e.register_fn("publish", move |t: &str, v: Dynamic| -> Result<(), Box<EvalAltResult>> {
+    e.def("publish", &["topic: string", "value: ?", "()"], "Sends value to the topic's subscribers, at the start of the next frame. Topics start with your mod's id.", move |t: &str, v: Dynamic| -> Result<(), Box<EvalAltResult>> {
         Ok(crate::bus::publish(&who()?, t, &dyn_to_json(&v)?, false)?)
     })
-    .register_fn("publish_retained", move |t: &str, v: Dynamic| -> Result<(), Box<EvalAltResult>> {
+    .def("publish_retained", &["topic: string", "value: ?", "()"], "Like publish, and keeps value as the topic's current value for mods that subscribe later.", move |t: &str, v: Dynamic| -> Result<(), Box<EvalAltResult>> {
         Ok(crate::bus::publish(&who()?, t, &dyn_to_json(&v)?, true)?)
     })
-    .register_fn("subscribe", move |t: &str, f: &str| -> Result<(), Box<EvalAltResult>> {
+    .def("subscribe", &["topic: string", "function: string", "()"], "Calls function(value) in this script for each event on the topic (and its retained value, if any).", move |t: &str, f: &str| -> Result<(), Box<EvalAltResult>> {
         crate::bus::subscribe(t, crate::bus::Target::Rhai { script: script_who()?, function: f.into() })?;
         Ok(())
     })
-    .register_fn("unsubscribe", move |t: &str, f: &str| -> Result<(), Box<EvalAltResult>> {
+    .def("unsubscribe", &["topic: string", "function: string", "()"], "Stops calling function for the topic's events.", move |t: &str, f: &str| -> Result<(), Box<EvalAltResult>> {
         crate::bus::unsubscribe_target(t, &crate::bus::Target::Rhai { script: script_who()?, function: f.into() });
         Ok(())
     })
-    .register_fn("provide", move |n: &str, f: &str| -> Result<(), Box<EvalAltResult>> {
+    .def("provide", &["name: string", "function: string", "()"], "Lets other mods call function(args) in this script as the service name; its return value is the result. Names start with your mod's id.", move |n: &str, f: &str| -> Result<(), Box<EvalAltResult>> {
         Ok(crate::bus::provide(&script_who()?, n, crate::bus::Provider::Rhai { script: script_who()?, function: f.into() })?)
     })
-    .register_fn("call_service", |n: &str, args: Dynamic| -> Result<Dynamic, Box<EvalAltResult>> {
+    .def("call_service", &["name: string", "args: ?", "?"], "Calls a service another mod provides and returns its value; throws its error.", |n: &str, args: Dynamic| -> Result<Dynamic, Box<EvalAltResult>> {
         Ok(json_to_dyn(&crate::bus::call(n, &dyn_to_json(&args)?)?))
     })
-    .register_fn("call_service", |n: &str| -> Result<Dynamic, Box<EvalAltResult>> {
+    .def("call_service", &["name: string", "?"], "Calls a service that takes no arguments and returns its value; throws its error.", |n: &str| -> Result<Dynamic, Box<EvalAltResult>> {
         Ok(json_to_dyn(&crate::bus::call(n, "null")?))
     });
 
     // keys, by the game's key names ("F5", "K", "Space"); pressed = this frame only
-    e.register_fn("key_pressed", |k: &str| oxidizer_api::key_pressed(k))
-        .register_fn("key_down", |k: &str| oxidizer_api::key_down(k));
+    e.def("key_pressed", &["key: string", "bool"], "True on the frame the key was pressed. Names are the game's: \"F5\", \"K\", \"Space\", \"LeftShift\".", |k: &str| oxidizer_api::key_pressed(k))
+        .def("key_down", &["key: string", "bool"], "True while the key is held.", |k: &str| oxidizer_api::key_down(k));
 
     // settings saved per mod in <documents>/oxidizer/<mod>.toml: bools, numbers and strings
-    e.register_fn("config_get", config_get).register_fn("config_set", config_set);
+    e.def("config_get", &["key: string", "default: ?", "?"], "A saved setting of this mod, or default. Settings are bools, numbers and strings.", config_get)
+        .def("config_set", &["key: string", "value: ?", "()"], "Saves a setting of this mod (to <documents>/oxidizer/<mod>.toml).", config_set);
 
     // imgui (only inside gui())
-    e.register_fn("begin", |t: &str| imgui::begin(t))
-        .register_fn("end", imgui::end)
-        .register_fn("text", |s: &str| imgui::text(s))
-        .register_fn("button", |s: &str| imgui::button(s))
-        .register_fn("checkbox", |l: &str, mut v: bool| {
+    e.def("begin", &["title: string", "bool"], "Starts a window (in gui()); true while it is open. Always call end().", |t: &str| imgui::begin(t))
+        .def("end", &["()"], "Ends the window begin() started.", imgui::end)
+        .def("text", &["text: string", "()"], "A line of text.", |s: &str| imgui::text(s))
+        .def("button", &["label: string", "bool"], "A button; true when clicked.", |s: &str| imgui::button(s))
+        .def("checkbox", &["label: string", "value: bool", "bool"], "A checkbox; returns the new value.", |l: &str, mut v: bool| {
             imgui::checkbox(l, &mut v);
             v
         })
-        .register_fn("slider", |l: &str, v: f64, min: f64, max: f64| {
+        .def("slider", &["label: string", "value: float", "min: float", "max: float", "float"], "A slider; returns the new value.", |l: &str, v: f64, min: f64, max: f64| {
             let mut x = v as f32;
             imgui::slider_float(l, &mut x, min as f32, max as f32);
             x as f64
         })
-        .register_fn("same_line", imgui::same_line)
-        .register_fn("separator", imgui::separator)
-        .register_fn("header", |l: &str| imgui::collapsing_header(l))
-        .register_fn("text_colored", |color: Array, s: &str| imgui::text_colored(rgba(&color), s))
-        .register_fn("input_text", |l: &str, text: &str| text_field(l, text, |b| {
+        .def("same_line", &["()"], "Puts the next item on the same line.", imgui::same_line)
+        .def("separator", &["()"], "A horizontal line.", imgui::separator)
+        .def("header", &["label: string", "bool"], "A collapsing section header; true while open.", |l: &str| imgui::collapsing_header(l))
+        .def("text_colored", &["color: array", "text: string", "()"], "Text in a color: [r, g, b] or [r, g, b, a], 0.0 to 1.0.", |color: Array, s: &str| imgui::text_colored(rgba(&color), s))
+        .def("input_text", &["label: string", "text: string", "string"], "A one-line text field; returns the new text.", |l: &str, text: &str| text_field(l, text, |b| {
             imgui::input_text(l, b, 0);
         }))
-        .register_fn("input_multiline", |l: &str, text: &str, w: f64, h: f64| text_field(l, text, |b| {
+        .def("input_multiline", &["label: string", "text: string", "width: float", "height: float", "string"], "A multi-line text field; returns the new text.", |l: &str, text: &str, w: f64, h: f64| text_field(l, text, |b| {
             imgui::input_text_multiline(l, b, w as f32, h as f32, imgui::text_flags::ALLOW_TAB_INPUT);
         }))
-        .register_fn("input_float", |l: &str, mut v: f64| {
+        .def("input_float", &["label: string", "value: float", "float"], "A number field; returns the new value.", |l: &str, mut v: f64| {
             imgui::input_double(l, &mut v);
             v
         })
-        .register_fn("begin_tab_bar", |id: &str| imgui::begin_tab_bar(id))
-        .register_fn("end_tab_bar", imgui::end_tab_bar)
-        .register_fn("begin_tab", |l: &str| imgui::begin_tab_item(l, None, 0))
-        .register_fn("end_tab", imgui::end_tab_item)
-        .register_fn("begin_child", |id: &str, h: f64| imgui::begin_child(id, h as f32))
-        .register_fn("end_child", imgui::end_child)
-        .register_fn("set_next_window_size", |w: f64, h: f64| imgui::set_next_window_size(w as f32, h as f32))
-        .register_fn("ctrl_shortcut", |k: &str| k.chars().next().is_some_and(imgui::ctrl_shortcut));
+        .def("begin_tab_bar", &["id: string", "bool"], "Starts a row of tabs; call end_tab_bar() only when this returned true.", |id: &str| imgui::begin_tab_bar(id))
+        .def("end_tab_bar", &["()"], "Ends the tab bar.", imgui::end_tab_bar)
+        .def("begin_tab", &["label: string", "bool"], "A tab; true while it is the selected one. Call end_tab() only then.", |l: &str| imgui::begin_tab_item(l, None, 0))
+        .def("end_tab", &["()"], "Ends the tab.", imgui::end_tab_item)
+        .def("begin_child", &["id: string", "height: float", "bool"], "A scrolling region, height pixels tall (0 fills the window). Always call end_child().", |id: &str, h: f64| imgui::begin_child(id, h as f32))
+        .def("end_child", &["()"], "Ends the scrolling region.", imgui::end_child)
+        .def("set_next_window_size", &["width: float", "height: float", "()"], "The next window's size when it first appears.", |w: f64, h: f64| imgui::set_next_window_size(w as f32, h as f32))
+        .def("ctrl_shortcut", &["key: string", "bool"], "True on the frame Ctrl and the letter were pressed, also while typing in a text field.", |k: &str| k.chars().next().is_some_and(imgui::ctrl_shortcut));
 
     // menu entries (only inside menu(), which runs inside the "Mods" menu)
-    e.register_fn("menu_item", |l: &str| imgui::menu_item(l, false))
-        .register_fn("menu_item", |l: &str, selected: bool| imgui::menu_item(l, selected))
-        .register_fn("begin_menu", |l: &str| imgui::begin_menu(l))
-        .register_fn("end_menu", imgui::end_menu);
+    e.def("menu_item", &["label: string", "bool"], "An entry in the Mods menu (in menu()); true when clicked.", |l: &str| imgui::menu_item(l, false))
+        .def("menu_item", &["label: string", "selected: bool", "bool"], "An entry with a check mark while selected; true when clicked.", |l: &str, selected: bool| imgui::menu_item(l, selected))
+        .def("begin_menu", &["label: string", "bool"], "A submenu; call end_menu() only when this returned true.", |l: &str| imgui::begin_menu(l))
+        .def("end_menu", &["()"], "Ends the submenu.", imgui::end_menu);
     e
+}
+
+#[cfg(test)]
+mod tests {
+    #[test]
+    fn definitions_name_parameters() {
+        let defs = super::engine().definitions().single_file();
+        for want in [
+            "fn subscribe(topic: string, function: string) -> ();",
+            "fn call_service(name: string, args: ?) -> ?;",
+            "fn static_get(type_name: string, member: string) -> Obj;",
+            "fn text(text: string) -> ();",
+            "/// Calls function(value) in this script",
+        ] {
+            assert!(defs.contains(want), "missing {want:?}");
+        }
+        assert!(!defs.contains("EvalAltResult"));
+        // Rhai's own to_float and to_int come without names: not ours to fix.
+        let bare: Vec<&str> = defs.lines().filter(|l| l.contains("(_: ") && !l.starts_with("fn to_")).collect();
+        assert!(bare.is_empty(), "without parameter names: {bare:?}");
+    }
 }

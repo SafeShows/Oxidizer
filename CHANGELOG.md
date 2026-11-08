@@ -5,6 +5,12 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ## [Unreleased]
 
+## [0.9.1] - 2026-11-08
+
+### Fixed
+
+- The Rhai definition files for editors now give Oxidizer's own functions their parameter names, return types and a line of docs (`fn subscribe(topic: string, function: string) -> ()` instead of `fn subscribe(_: string, _: string) -> EvalAltResult>>`). Editors and Rhai Studio's autocomplete show them. The files are rewritten on the next start.
+
 ## [0.9.0] - 2026-11-08
 
 ### Added
@@ -153,7 +159,8 @@ First release.
 - When a method has several overloads, `call` and patching use the first one with a matching number of arguments.
 - Hooks can't read or change a patched method's return value.
 
-[Unreleased]: https://github.com/SafeShows/Oxidizer/compare/v0.9.0...HEAD
+[Unreleased]: https://github.com/SafeShows/Oxidizer/compare/v0.9.1...HEAD
+[0.9.1]: https://github.com/SafeShows/Oxidizer/compare/v0.9.0...v0.9.1
 [0.9.0]: https://github.com/SafeShows/Oxidizer/compare/v0.8.0...v0.9.0
 [0.8.0]: https://github.com/SafeShows/Oxidizer/compare/v0.7.0...v0.8.0
 [0.7.0]: https://github.com/SafeShows/Oxidizer/compare/v0.6.3...v0.7.0
