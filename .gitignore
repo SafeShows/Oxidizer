@@ -2,5 +2,5 @@
 /bridge/bin
 /bridge/obj
 
-# mdBook output
-/book/book
+# MkDocs output
+/book/site

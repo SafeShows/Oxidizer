@@ -1,5 +1,7 @@
 // `oxidizer --bindgen <file.rs>`: writes typed Rust wrappers for the public types of the installed KSA.dll.
 // Each member is called by its metadata token (exact, no overload guessing) through oxidizer_api::bind.
+// `oxidizer --bindgen <file.json>` writes the same API as data instead, for the modding guide's Game API page:
+// every type and member with its C# signature, the generated Rust function and the Rhai form.
 using System;
 using System.Collections.Generic;
 using System.IO;
@@ -7,6 +9,7 @@ using System.Linq;
 using System.Reflection;
 using System.Runtime.InteropServices;
 using System.Text;
+using System.Text.Json;
 
 namespace Oxidizer;
 
@@ -28,7 +31,20 @@ public static unsafe class Bindgen
         try
         {
             var file = Encoding.UTF8.GetString(path, (int)len);
+            var json = file.EndsWith(".json", StringComparison.OrdinalIgnoreCase);
+            if (json) _dump = new();
             var (text, types, members) = Generate();
+            if (json)
+            {
+                var doc = new Dictionary<string, object?>
+                {
+                    ["game"] = _ksa.GetName().Version?.ToString(),
+                    ["build"] = _ksa.ManifestModule.ModuleVersionId.ToString(),
+                    ["types"] = _dump,
+                };
+                text = JsonSerializer.Serialize(doc);
+                _dump = null;
+            }
             File.WriteAllText(file, text);
             Console.WriteLine($"[oxidizer] bindgen: wrote {types} types, {members} members to {file}");
             return 1;
@@ -42,6 +58,9 @@ public static unsafe class Bindgen
 
     static Assembly _ksa = null!;
     static HashSet<Type> _wrapped = null!;
+    /// JSON mode: one entry per type, and the member list of the type being generated.
+    static List<Dictionary<string, object?>>? _dump;
+    static List<Dictionary<string, object?>>? _members;
 
     static (string, int, int) Generate()
     {
@@ -117,8 +136,14 @@ public static unsafe class Bindgen
     {
         sb.AppendLine($"{ind}/// Values of the enum `{t.FullName}` (enums are passed as i64).");
         sb.AppendLine($"{ind}pub mod {TypeName(t)} {{");
+        var values = new List<Dictionary<string, object?>>();
         foreach (var f in t.GetFields(BindingFlags.Public | BindingFlags.Static))
-            sb.AppendLine($"{ind}    pub const {Ident(f.Name)}: i64 = {System.Convert.ToInt64(f.GetRawConstantValue())};");
+        {
+            var v = System.Convert.ToInt64(f.GetRawConstantValue());
+            sb.AppendLine($"{ind}    pub const {Ident(f.Name)}: i64 = {v};");
+            values.Add(new() { ["cs"] = $"{f.Name} = {v}", ["kind"] = "value", ["static"] = true, ["rust"] = $"{PathOf(t, 0)}::{Ident(f.Name)}", ["rhai"] = $"{PathOf(t, 0)}::{f.Name}" });
+        }
+        _dump?.Add(new() { ["name"] = t.FullName, ["rust"] = PathOf(t, 0), ["kind"] = "enum", ["base"] = null, ["members"] = values });
         sb.AppendLine($"{ind}}}");
     }
 
@@ -126,15 +151,21 @@ public static unsafe class Bindgen
     {
         var name = TypeName(t);
         var kind = t.IsInterface ? "interface" : t.IsValueType ? "struct (a boxed copy: setters change the copy)" : "class";
+        var baseOf = t.BaseType != null && _wrapped.Contains(t.BaseType) ? t.BaseType : null;
+        if (_dump != null)
+        {
+            _members = new();
+            _dump.Add(new() { ["name"] = t.FullName, ["rust"] = PathOf(t, 0), ["kind"] = kind.Split(' ')[0], ["base"] = baseOf?.FullName, ["members"] = _members });
+        }
+        var rp = PathOf(t, 0); // the type's path from the crate root, also its Rhai module: ksa::Vehicle
         sb.AppendLine($"{ind}/// `{t.FullName}` ({kind}).");
         sb.AppendLine($"{ind}#[repr(transparent)]");
         sb.AppendLine($"{ind}pub struct {name}(pub Obj);");
         // Deref to the base type, so base members are callable; the chain ends at Obj.
-        var baseType = t.BaseType != null && _wrapped.Contains(t.BaseType) ? t.BaseType : null;
         sb.AppendLine($"{ind}impl std::ops::Deref for {name} {{");
-        if (baseType != null)
+        if (baseOf != null)
         {
-            var bp = PathOf(baseType, depth);
+            var bp = PathOf(baseOf, depth);
             sb.AppendLine($"{ind}    type Target = {bp};");
             sb.AppendLine($"{ind}    fn deref(&self) -> &{bp} {{ unsafe {{ &*(self as *const Self as *const {bp}) }} }}");
         }
@@ -148,34 +179,43 @@ public static unsafe class Bindgen
         var body = new StringBuilder();
         var used = new HashSet<string> { "deref" };
         int count = 0;
-        void Add(string rustName, string text)
+        void Add(string rustName, string text, string cs, string what, bool isStatic, string rhai)
         {
             var n = rustName;
             for (int i = 2; !used.Add(n); i++) n = $"{rustName}_{i}";
-            body.Append(text.Replace("$NAME$", n));
+            var line = text.Replace("$NAME$", n);
+            body.Append(line);
             count++;
+            _members?.Add(new() { ["cs"] = cs, ["kind"] = what, ["static"] = isStatic, ["rust"] = RustSignature(line), ["rhai"] = rhai });
         }
 
         if (!t.IsAbstract && !t.IsValueType)
             foreach (var c in t.GetConstructors(BindingFlags.Public | BindingFlags.Instance))
                 if (Signature(c.GetParameters(), depth) is { } sig)
-                    Add("new", $"{ind}    pub fn $NAME$({sig.Params}) -> Self {{ Self({B}.invoke(0, 0x{c.MetadataToken:x8}, &[{sig.Args}])) }}\n");
+                    Add("new", $"{ind}    pub fn $NAME$({sig.Params}) -> Self {{ Self({B}.invoke(0, 0x{c.MetadataToken:x8}, &[{sig.Args}])) }}\n",
+                        $"new {t.Name}({CsParams(c)})", "constructor", true, $"{rp}::new({RhaiParams(c)})");
 
         foreach (var p in t.GetProperties(Declared))
         {
             if (p.GetIndexParameters().Length > 0 || Map(p.PropertyType, depth) is not { } ty) continue;
+            var rt = Describer.RhaiType(p.PropertyType);
             if (p.GetMethod is { IsPublic: true } g)
-                Add(Snake(p.Name), Getter(ind, g.IsStatic, ty, $"{B}.invoke({Self(g.IsStatic)}, 0x{g.MetadataToken:x8}, &[])"));
+                Add(Snake(p.Name), Getter(ind, g.IsStatic, ty, $"{B}.invoke({Self(g.IsStatic)}, 0x{g.MetadataToken:x8}, &[])"),
+                    $"{p.PropertyType.Name} {p.Name} {{ get; }}", "property", g.IsStatic, g.IsStatic ? $"{rp}::{Snake(p.Name)}() -> {rt}" : $"obj.{Snake(p.Name)} -> {rt}");
             if (p.SetMethod is { IsPublic: true } s)
-                Add("set_" + Snake(p.Name), Setter(ind, s.IsStatic, ty, v => $"{B}.invoke({Self(s.IsStatic)}, 0x{s.MetadataToken:x8}, &[{v}]);"));
+                Add("set_" + Snake(p.Name), Setter(ind, s.IsStatic, ty, v => $"{B}.invoke({Self(s.IsStatic)}, 0x{s.MetadataToken:x8}, &[{v}]);"),
+                    $"{p.PropertyType.Name} {p.Name} {{ set; }}", "property", s.IsStatic, s.IsStatic ? $"{rp}::set_{Snake(p.Name)}(value: {rt})" : $"obj.{Snake(p.Name)} = value: {rt}");
         }
 
         foreach (var f in t.GetFields(Declared))
         {
             if (f.Name.Contains('<') || Map(f.FieldType, depth) is not { } ty) continue;
-            Add(Snake(f.Name), Getter(ind, f.IsStatic, ty, $"{B}.field_get({Self(f.IsStatic)}, 0x{f.MetadataToken:x8})"));
+            var rt = Describer.RhaiType(f.FieldType);
+            Add(Snake(f.Name), Getter(ind, f.IsStatic, ty, $"{B}.field_get({Self(f.IsStatic)}, 0x{f.MetadataToken:x8})"),
+                $"{f.FieldType.Name} {f.Name}", "field", f.IsStatic, f.IsStatic ? $"{rp}::{Snake(f.Name)}() -> {rt}" : $"obj.{Snake(f.Name)} -> {rt}");
             if (!f.IsInitOnly && !f.IsLiteral)
-                Add("set_" + Snake(f.Name), Setter(ind, f.IsStatic, ty, v => $"{B}.field_set({Self(f.IsStatic)}, 0x{f.MetadataToken:x8}, {v});"));
+                Add("set_" + Snake(f.Name), Setter(ind, f.IsStatic, ty, v => $"{B}.field_set({Self(f.IsStatic)}, 0x{f.MetadataToken:x8}, {v});"),
+                    $"{f.FieldType.Name} {f.Name} (set)", "field", f.IsStatic, f.IsStatic ? $"{rp}::set_{Snake(f.Name)}(value: {rt})" : $"obj.{Snake(f.Name)} = value: {rt}");
         }
 
         foreach (var mi in t.GetMethods(Declared))
@@ -184,10 +224,12 @@ public static unsafe class Bindgen
             if (Signature(mi.GetParameters(), depth) is not { } sig) continue;
             var self = mi.IsStatic ? "" : sig.Params.Length > 0 ? "&self, " : "&self";
             var call = $"{B}.invoke({Self(mi.IsStatic)}, 0x{mi.MetadataToken:x8}, &[{sig.Args}])";
+            var cs = $"{mi.ReturnType.Name} {mi.Name}({CsParams(mi)})";
+            var rhai = (mi.IsStatic ? $"{rp}::" : "obj.") + $"{Snake(mi.Name)}({RhaiParams(mi)})" + (mi.ReturnType == typeof(void) ? "" : $" -> {Describer.RhaiType(mi.ReturnType)}");
             if (mi.ReturnType == typeof(void))
-                Add(Snake(mi.Name), $"{ind}    pub fn $NAME$({self}{sig.Params}) {{ {call}; }}\n");
+                Add(Snake(mi.Name), $"{ind}    pub fn $NAME$({self}{sig.Params}) {{ {call}; }}\n", cs, "method", mi.IsStatic, rhai);
             else if (Map(mi.ReturnType, depth) is { } rt)
-                Add(Snake(mi.Name), $"{ind}    pub fn $NAME$({self}{sig.Params}) -> {rt.Ret} {{ {rt.Wrap(call)} }}\n");
+                Add(Snake(mi.Name), $"{ind}    pub fn $NAME$({self}{sig.Params}) -> {rt.Ret} {{ {rt.Wrap(call)} }}\n", cs, "method", mi.IsStatic, rhai);
         }
 
         if (body.Length > 0)
@@ -200,6 +242,18 @@ public static unsafe class Bindgen
     }
 
     static string Self(bool isStatic) => isStatic ? "0" : "self.0.handle()";
+
+    /// "pub fn name(&self, x: f64) -> f64" from a generated line, with paths from the crate root.
+    static string RustSignature(string line)
+    {
+        var s = line.Trim();
+        var end = s.IndexOf(" { ", StringComparison.Ordinal);
+        return (end > 0 ? s[..end] : s).Replace("super::", "");
+    }
+
+    static string CsParams(MethodBase m) => string.Join(", ", m.GetParameters().Select(p => $"{p.ParameterType.Name} {p.Name}"));
+
+    static string RhaiParams(MethodBase m) => string.Join(", ", m.GetParameters().Select(p => $"{Snake(p.Name ?? "arg")}: {Describer.RhaiType(p.ParameterType)}"));
 
     static string Getter(string ind, bool isStatic, Mapping ty, string call) =>
         $"{ind}    pub fn $NAME$({(isStatic ? "" : "&self")}) -> {ty.Ret} {{ {ty.Wrap(call)} }}\n";

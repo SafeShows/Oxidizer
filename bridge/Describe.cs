@@ -84,7 +84,7 @@ public static unsafe class Describer
         && (m is not MethodInfo mi || mi.ReturnType == typeof(void) || Passable(mi.ReturnType));
 
     /// A type as a Rhai script sees it (numbers, bools and strings arrive as Rhai values, enums as integers).
-    static string RhaiType(Type t) => t switch
+    internal static string RhaiType(Type t) => t switch
     {
         _ when t == typeof(void) => "()",
         _ when t == typeof(bool) => "bool",

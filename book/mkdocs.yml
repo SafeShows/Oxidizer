@@ -1,0 +1,85 @@
+# The modding guide, built with MkDocs and the Material theme: https://oxidizer.safeshows.dev/
+# Preview locally: pip install mkdocs-material==9.8.1, then `mkdocs serve -f book/mkdocs.yml`.
+site_name: Oxidizer modding guide
+site_description: Write Kitten Space Agency mods in Rust and Rhai with Oxidizer.
+site_url: https://oxidizer.safeshows.dev/
+repo_url: https://github.com/SafeShows/Oxidizer
+repo_name: SafeShows/Oxidizer
+edit_uri: edit/master/book/src/
+docs_dir: src
+
+theme:
+  name: material
+  palette:
+    # Follow the system setting, with a toggle for light and dark.
+    - media: "(prefers-color-scheme)"
+      toggle: { icon: material/brightness-auto, name: Switch to light mode }
+    - media: "(prefers-color-scheme: light)"
+      scheme: default
+      primary: blue grey
+      accent: amber
+      toggle: { icon: material/weather-sunny, name: Switch to dark mode }
+    - media: "(prefers-color-scheme: dark)"
+      scheme: slate
+      primary: blue grey
+      accent: amber
+      toggle: { icon: material/weather-night, name: Switch to system preference }
+  font:
+    text: Inter
+    code: JetBrains Mono
+  features:
+    - navigation.sections
+    - navigation.top
+    - navigation.footer
+    - search.highlight
+    - search.suggest
+    - content.code.copy
+    - content.action.edit
+
+markdown_extensions:
+  - admonition
+  - attr_list
+  - md_in_html
+  - tables
+  - toc: { permalink: true }
+  - pymdownx.highlight: { anchor_linenums: true }
+  - pymdownx.inlinehilite
+  - pymdownx.superfences
+  - pymdownx.details
+
+extra_css:
+  - assets/game-api.css
+extra_javascript:
+  - assets/game-api.js
+
+nav:
+  - Introduction: introduction.md
+  - Getting started:
+      - Installing Oxidizer: install.md
+      - How mods are found: mod-folders.md
+  - Rhai mods:
+      - Your first Rhai mod: rhai/first-mod.md
+      - Callbacks and state: rhai/callbacks.md
+      - Using the game: rhai/game.md
+      - Windows and menus: rhai/ui.md
+      - Hooks: rhai/hooks.md
+      - Keys and settings: rhai/keys-settings.md
+      - Editor setup: rhai/editor.md
+  - Rust mods:
+      - Your first Rust mod: rust/first-mod.md
+      - The Mod trait: rust/mod-trait.md
+      - Using the game: rust/game.md
+      - Typed bindings: rust/bindings.md
+      - Windows and menus: rust/ui.md
+      - Hooks: rust/hooks.md
+      - Keys, settings and more: rust/more.md
+  - Reference:
+      - Rhai API: reference/rhai.md
+      - Rust API: reference/rust.md
+      - Game API: reference/game-api.md
+      - Files and command line: reference/files.md
+  - Sharing your mod:
+      - Releases: publishing/releases.md
+      - The content index: publishing/content-index.md
+  - Examples: examples.md
+  - Troubleshooting: troubleshooting.md

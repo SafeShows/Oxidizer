@@ -1,0 +1,30 @@
+/* The Game API page, in Material's light and dark colors. */
+#game-api-search {
+  width: 100%;
+  padding: 0.6em 0.8em;
+  font-size: 0.8rem;
+  border: 1px solid var(--md-default-fg-color--lighter);
+  border-radius: 4px;
+  background: var(--md-code-bg-color);
+  color: var(--md-default-fg-color);
+}
+#game-api-search:focus { outline: 2px solid var(--md-accent-fg-color); }
+#game-api-status { color: var(--md-default-fg-color--light); font-size: 0.7rem; }
+#game-api-results details {
+  border: 1px solid var(--md-default-fg-color--lightest);
+  border-radius: 4px;
+  margin: 0.4em 0;
+  padding: 0.3em 0.6em;
+}
+#game-api-results summary { cursor: pointer; font-size: 0.75rem; }
+.game-api-meta { color: var(--md-default-fg-color--light); font-size: 0.65rem; margin-left: 0.4em; }
+table.game-api-members { display: block; overflow-x: auto; font-size: 0.62rem; margin: 0.5em 0; border-collapse: collapse; }
+table.game-api-members th, table.game-api-members td {
+  padding: 0.25em 0.6em;
+  border-top: 1px solid var(--md-default-fg-color--lightest);
+  text-align: left;
+  vertical-align: top;
+  white-space: nowrap;
+}
+table.game-api-members code { background: none; padding: 0; font-size: inherit; }
+tr.game-api-hit { background: var(--md-accent-fg-color--transparent); }
