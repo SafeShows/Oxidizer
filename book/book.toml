@@ -5,7 +5,7 @@ language = "en"
 src = "src"
 
 [output.html]
-site-url = "/Oxidizer/"
+site-url = "/"
 git-repository-url = "https://github.com/SafeShows/Oxidizer"
 edit-url-template = "https://github.com/SafeShows/Oxidizer/edit/master/book/{path}"
 default-theme = "navy"

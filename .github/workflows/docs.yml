@@ -1,4 +1,4 @@
-# Builds the modding guide in book/ with mdBook and publishes it to GitHub Pages: https://safeshows.github.io/Oxidizer/
+# Builds the modding guide in book/ with mdBook and publishes it to GitHub Pages: https://oxidizer.safeshows.dev/
 name: docs
 
 on:
