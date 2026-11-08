@@ -1,4 +1,16 @@
 /* The Game API page, in Material's light and dark colors. */
+
+/* This page's tables are wide: let its content use the whole window (the side nav stays). */
+body:has(#game-api) .md-grid { max-width: none; }
+
+/* Signatures, colored with Material's code colors so they match code blocks in both themes. */
+.game-api-members .k { color: var(--md-code-hl-keyword-color); }
+.game-api-members .t { color: var(--md-code-hl-name-color); }
+.game-api-members .f { color: var(--md-code-hl-function-color); }
+.game-api-members .m { color: var(--md-code-hl-generic-color); }
+.game-api-members .n { color: var(--md-code-hl-number-color); }
+.game-api-members .p { color: var(--md-code-hl-punctuation-color); }
+.game-api-members .v { color: var(--md-code-hl-variable-color); }
 #game-api-search {
   width: 100%;
   padding: 0.6em 0.8em;

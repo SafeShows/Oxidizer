@@ -13,12 +13,37 @@
 
     const esc = (s) => String(s ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]);
 
+    // Colors a C#, Rust or Rhai signature: keywords, types, functions, module paths, numbers, punctuation.
+    const KEYWORDS = new Set(["pub", "fn", "self", "Self", "mut", "get", "set", "new", "obj", "static"]);
+    const PRIMITIVES = new Set(["f64", "i64", "bool", "str", "int", "float", "String"]);
+    function color(sig) {
+      const s = String(sig ?? "");
+      let out = "";
+      const re = /([A-Za-z_][A-Za-z0-9_`]*)|(\d+(?:\.\d+)?)|(::|->|[&(){}<>,:;=.\[\]?])|(\s+)|(.)/g;
+      let m;
+      while ((m = re.exec(s))) {
+        const [tok, word, num, punct] = m;
+        if (word) {
+          const rest = s.slice(re.lastIndex);
+          const cls = KEYWORDS.has(word) ? "k"
+            : rest.startsWith("::") ? "m"
+            : rest.startsWith("(") || rest.trimStart().startsWith("{") ? "f"
+            : PRIMITIVES.has(word) || /^[A-Z]/.test(word) ? "t"
+            : rest.startsWith(":") ? "v" : "";
+          out += cls ? `<span class="${cls}">${esc(word)}</span>` : esc(word);
+        } else if (num) out += `<span class="n">${num}</span>`;
+        else if (punct) out += `<span class="p">${esc(punct)}</span>`;
+        else out += esc(tok);
+      }
+      return out;
+    }
+
     function memberRows(members, q) {
       return members
         .map((m) => {
           const hit = q && [m.cs, m.rust, m.rhai].some((x) => String(x).toLowerCase().includes(q));
           return `<tr${hit ? ' class="game-api-hit"' : ""}><td>${esc(m.kind)}${m.static ? " <em>static</em>" : ""}</td>` +
-            `<td><code>${esc(m.cs)}</code></td><td><code>${esc(m.rust)}</code></td><td><code>${esc(m.rhai)}</code></td></tr>`;
+            `<td><code>${color(m.cs)}</code></td><td><code>${color(m.rust)}</code></td><td><code>${color(m.rhai)}</code></td></tr>`;
         })
         .join("");
     }
