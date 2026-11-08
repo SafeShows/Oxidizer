@@ -49,6 +49,8 @@ On first run without `--game`, the loader creates `oxidizer.toml` next to the ex
 [Rhai](https://github.com/SafeShows/oxidizer-rhai-mod-template) or
 [Rust](https://github.com/SafeShows/oxidizer-rust-mod-template) (**Use this template** on GitHub).
 
+**A full example:** [Flight Panel](https://github.com/SafeShows/oxidizer-flight-panel), a Rust mod with a flight data window, a warp guard that patches the game, saved settings, hotkeys and Mods menu entries.
+
 
 A mod is a folder in `Documents/My Games/Kitten Space Agency/mods/<id>/` whose `mod.toml` has a `[oxidizer]` section:
 
