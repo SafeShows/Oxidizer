@@ -42,6 +42,59 @@ fn gui(dt) {
 | `separator()` | A horizontal line. |
 | `header(label)` | A collapsible section; true while open. |
 
+## More widgets
+
+Oxidizer 0.8 and later:
+
+```rust
+fn init() {
+    this.name = "Jeb";
+    this.notes = "";
+    this.mass = 1.5;
+}
+
+fn gui(dt) {
+    set_next_window_size(420.0, 320.0);              // the size the first time the window opens
+    if begin("My mod") {
+        text_colored([1.0, 0.6, 0.2], "orange");     // [r, g, b] or [r, g, b, a], 0 to 1
+        this.name = input_text("Name", this.name);   // returns the text after this frame's typing
+        this.mass = input_float("Mass", this.mass);
+        if begin_tab_bar("tabs") {
+            if begin_tab("Notes") {
+                this.notes = input_multiline("##notes", this.notes, 300.0, 120.0);
+                end_tab();
+            }
+            if begin_tab("About") {
+                text("second tab");
+                end_tab();
+            }
+            end_tab_bar();
+        }
+        begin_child("log", 80.0);                    // a scrolling box; 0 height fills the window
+        text("...");
+        end_child();
+        if ctrl_shortcut("s") {                      // Ctrl+S, also while typing in a field
+            print("saved");
+        }
+    }
+    end();
+}
+```
+
+| Function | Does |
+|---|---|
+| `text_colored(color, s)` | Text in a color: `[r, g, b]` or `[r, g, b, a]`, each 0 to 1. |
+| `input_text(label, text)` | A one-line text field; returns the text after this frame's edits. |
+| `input_multiline(label, text, width, height)` | A multi-line text box (Tab types a tab); returns the text. A negative width or height fills the window except that many pixels. |
+| `input_float(label, value)` | A number field; returns the new value. |
+| `begin_tab_bar(id)` / `end_tab_bar()` | Tabs; call `end_tab_bar()` only when `begin_tab_bar` returned true. |
+| `begin_tab(label)` / `end_tab()` | A tab; true while it is selected, then call `end_tab()`. |
+| `begin_child(id, height)` / `end_child()` | A scrolling region with a border; call `end_child()` always. |
+| `set_next_window_size(width, height)` | The next window's size the first time it is shown. |
+| `ctrl_shortcut(key)` | True on the frame Ctrl and the letter were pressed, also while typing in a text field. |
+
+Store what the text and number functions return, as with `checkbox`: a field shows what you pass in, so `input_text("Name", this.name)` without storing the result would undo the player's typing every frame. Sizes are floats: write `300.0`, not `300`.
+
 Widgets in one window need different labels. To show the same label twice, add `##` and something unique: `button("Go##1")`, `button("Go##2")`. Only the part before `##` is shown.
 
 ## The Mods menu

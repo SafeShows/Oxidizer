@@ -4,7 +4,8 @@ Oxidizer calls functions your script defines. All of them are optional.
 
 | Function | When |
 |---|---|
-| `init()` | Once, when the mod starts. |
+| `init()` | Once, when the mod starts: before the game's `Main`, so before the game has loaded anything. |
+| `loaded()` | Once, when the game has loaded its content and mods (Oxidizer 0.8 and later). Set up what needs the game's data here. No flight exists yet: the controlled vehicle comes later. A mod that starts after this point gets `loaded()` right after `init()`. |
 | `frame(t, dt)` | Every frame. `t` is the game's player time, `dt` the seconds since the last frame. |
 | `gui(dt)` | Every frame, inside the game's ImGui frame: draw your windows here (see [Windows and menus](ui.md)). |
 | `menu()` | While the game's **Mods** menu is open: add your entries here. |

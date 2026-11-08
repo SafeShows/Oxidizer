@@ -51,6 +51,7 @@ public unsafe struct Host
     public delegate* unmanaged<void> Menu;
     public byte* Instance; // UTF-8 instance folder, empty for the normal Documents folder
     public nuint InstanceLen;
+    public delegate* unmanaged<void> Loaded; // the game finished loading its content and mods
 }
 
 public static unsafe class Bridge
@@ -110,6 +111,17 @@ public static unsafe class Bridge
             Harmony.Patch(AccessTools.Method(program, "OnDrawUiViewports"), postfix: new HarmonyMethod(typeof(Bridge), nameof(AfterGui)));
             // Empty method the game calls inside its menu bar, after its own menus.
             Harmony.Patch(AccessTools.Method(program, "DrawProgramMenusHook"), postfix: new HarmonyMethod(typeof(Bridge), nameof(AfterMenus)));
+            // The game finished loading its content and mods (StarMap's AllModsLoaded is the same moment). Optional:
+            // if a game update renames it, mods just don't get loaded().
+            try
+            {
+                var library = Type.GetType("KSA.ModLibrary, KSA", true)!;
+                Harmony.Patch(AccessTools.Method(library, "LoadAll"), postfix: new HarmonyMethod(typeof(Bridge), nameof(AfterLoadAll)));
+            }
+            catch (Exception e)
+            {
+                Console.WriteLine($"[oxidizer] can't tell mods when the game has loaded (KSA.ModLibrary.LoadAll): {e.Message}");
+            }
             // Keys the game acts on (not ones typed into a text field or the console).
             Harmony.Patch(AccessTools.Method(program, "DispatchKeyEvent"), prefix: new HarmonyMethod(typeof(Bridge), nameof(OnKeyEvent)));
 
@@ -154,6 +166,8 @@ public static unsafe class Bridge
     }
     static void AfterGui(double dt) => _host.Gui(dt);
     static void AfterMenus() => _host.Menu();
+
+    static void AfterLoadAll() => _host.Loaded();
 
     static bool DocumentsFolder(ref string __result)
     {

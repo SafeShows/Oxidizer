@@ -153,7 +153,7 @@ Scripts reload while the game runs: save the file and the new code takes over wi
 | Game objects | typed: `ksa::...` (above); by name: `static_get(type, member)`, `static_set(type, member, v)`, `static_call(type, method[, args])`, `obj.get(m)`, `obj.set(m, v)`, `obj.invoke(m[, args])`, `obj.float()`, `obj.is_null()`, `obj.len()`, `obj[i]`, `obj.to_string()` |
 | Patching | `patch(type, method, "prefix"\|"postfix", "fn_name")`. The callback is `fn_name(instance, args)`; returning `false` from a prefix skips the original method. |
 | Overloads | in `static_call`, `call` and `patch`, name the exact one with its parameter types: `"SetSimulationSpeed(double, bool)"` |
-| ImGui | `begin(title)` / `end()`, `text`, `button`, `checkbox(label, v) -> v`, `slider(label, v, min, max) -> v`, `same_line`, `separator`, `header` |
+| ImGui | `begin(title)` / `end()`, `text`, `text_colored([r, g, b], s)`, `button`, `checkbox(label, v) -> v`, `slider(label, v, min, max) -> v`, `input_text(label, s) -> s`, `input_multiline(label, s, w, h) -> s`, `input_float(label, v) -> v`, `begin_tab_bar` / `begin_tab`, `begin_child`, `same_line`, `separator`, `header`, `set_next_window_size`, `ctrl_shortcut("s")` |
 | Menu (in `menu()`) | `menu_item(label[, checked]) -> clicked`, `begin_menu(label)` / `end_menu()` for a submenu |
 | Return values (in a hook) | `result()`, `set_result(v)`: read or replace the hooked method's return value |
 | Keys | `key_pressed(name)` (this frame), `key_down(name)` (held), e.g. `key_pressed("F5")` |

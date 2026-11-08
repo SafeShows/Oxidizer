@@ -1,5 +1,6 @@
-//! Rhai script mods. Each script may define `init()`, `frame(t, dt)`, `gui(dt)`, `menu()`, `unload()`,
-//! and `reload()`, which runs when the file was changed and reloaded while the game runs.
+//! Rhai script mods. Each script may define `init()`, `loaded()` (the game finished loading), `frame(t, dt)`,
+//! `gui(dt)`, `menu()`, `unload()`, and `reload()`, which runs when the file was changed and reloaded while the
+//! game runs.
 //! Per-mod state lives in `this` (an object map) and survives reloads,
 //! e.g. `this.show = checkbox("Show", this.show ?? false);`.
 
@@ -93,6 +94,35 @@ struct Config {
 }
 
 static CONFIGS: Mutex<Vec<Config>> = Mutex::new(Vec::new());
+
+/// The editing buffers of Rhai text fields, by script and label: ImGui edits text in place, across frames.
+static TEXT_FIELDS: Mutex<Vec<((usize, String), imgui::TextBuffer)>> = Mutex::new(Vec::new());
+
+/// Draws a text field over `text` and returns the text after this frame's edits. The field keeps its own buffer;
+/// it takes `text` again whenever the script passes something else (e.g. it reset the value).
+fn text_field(label: &str, text: &str, draw: impl FnOnce(&mut imgui::TextBuffer)) -> String {
+    let key = (CURRENT.get(), label.to_string());
+    let mut fields = TEXT_FIELDS.lock().unwrap_or_else(|e| e.into_inner());
+    let i = match fields.iter().position(|(k, _)| *k == key) {
+        Some(i) => i,
+        None => {
+            fields.push((key, imgui::TextBuffer::new(text)));
+            fields.len() - 1
+        }
+    };
+    let buf = &mut fields[i].1;
+    if buf.as_str() != text {
+        buf.set(text);
+    }
+    draw(buf);
+    buf.as_str().to_string()
+}
+
+/// A color from a script: [r, g, b] or [r, g, b, a], each 0..1 (integers count too).
+fn rgba(c: &Array) -> [f32; 4] {
+    let at = |i: usize, d: f32| c.get(i).and_then(|v| v.as_float().ok().or(v.as_int().ok().map(|n| n as f64))).map_or(d, |v| v as f32);
+    [at(0, 1.0), at(1, 1.0), at(2, 1.0), at(3, 1.0)]
+}
 
 fn modified(path: &Path) -> Option<SystemTime> {
     fs::metadata(path).and_then(|m| m.modified()).ok()
@@ -194,6 +224,9 @@ fn start(engine: &Engine, i: usize, m: &mut Script) {
     if m.started {
         ui::set_status(&m.name, KIND, None);
         crate::mods::mark_started_id(&m.name); // mods that depend on it can start now
+        if crate::LOADED.load(std::sync::atomic::Ordering::Relaxed) {
+            call(engine, i, m, "loaded", ()); // started after the game loaded: it still gets loaded()
+        }
     }
 }
 
@@ -402,7 +435,26 @@ fn engine() -> Engine {
         })
         .register_fn("same_line", imgui::same_line)
         .register_fn("separator", imgui::separator)
-        .register_fn("header", |l: &str| imgui::collapsing_header(l));
+        .register_fn("header", |l: &str| imgui::collapsing_header(l))
+        .register_fn("text_colored", |color: Array, s: &str| imgui::text_colored(rgba(&color), s))
+        .register_fn("input_text", |l: &str, text: &str| text_field(l, text, |b| {
+            imgui::input_text(l, b, 0);
+        }))
+        .register_fn("input_multiline", |l: &str, text: &str, w: f64, h: f64| text_field(l, text, |b| {
+            imgui::input_text_multiline(l, b, w as f32, h as f32, imgui::text_flags::ALLOW_TAB_INPUT);
+        }))
+        .register_fn("input_float", |l: &str, mut v: f64| {
+            imgui::input_double(l, &mut v);
+            v
+        })
+        .register_fn("begin_tab_bar", |id: &str| imgui::begin_tab_bar(id))
+        .register_fn("end_tab_bar", imgui::end_tab_bar)
+        .register_fn("begin_tab", |l: &str| imgui::begin_tab_item(l, None, 0))
+        .register_fn("end_tab", imgui::end_tab_item)
+        .register_fn("begin_child", |id: &str, h: f64| imgui::begin_child(id, h as f32))
+        .register_fn("end_child", imgui::end_child)
+        .register_fn("set_next_window_size", |w: f64, h: f64| imgui::set_next_window_size(w as f32, h as f32))
+        .register_fn("ctrl_shortcut", |k: &str| k.chars().next().is_some_and(imgui::ctrl_shortcut));
 
     // menu entries (only inside menu(), which runs inside the "Mods" menu)
     e.register_fn("menu_item", |l: &str| imgui::menu_item(l, false))

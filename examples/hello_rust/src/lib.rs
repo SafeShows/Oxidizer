@@ -17,6 +17,11 @@ impl Mod for Hello {
         Hello { visible: true, show: true, frames: 0 }
     }
 
+    /// The game finished loading its content and mods.
+    fn loaded(&mut self) {
+        log("hello_rust: the game has loaded");
+    }
+
     fn frame(&mut self, _t: f64, _dt: f64) {
         self.frames += 1;
     }

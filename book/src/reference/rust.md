@@ -1,14 +1,14 @@
 # Rust API reference
 
-Everything in the [`oxidizer_api`](https://crates.io/crates/oxidizer_api) crate, version 0.4 (Oxidizer 0.7 and later). The same items, with their doc comments, are on [docs.rs](https://docs.rs/oxidizer_api).
+Everything in the [`oxidizer_api`](https://crates.io/crates/oxidizer_api) crate, version 0.5 (Oxidizer 0.8 and later; `Mod::loaded` is new in 0.5, the rest is in 0.4 and Oxidizer 0.7). The same items, with their doc comments, are on [docs.rs](https://docs.rs/oxidizer_api).
 
 ## The mod
 
 | Item | |
 |---|---|
-| `trait Mod: Send + 'static` | Your mod. `fn init() -> Self` is required; `fn frame(&mut self, player_time: f64, dt: f64)`, `fn gui(&mut self, dt: f64)`, `fn menu(&mut self)`, `fn unload(&mut self)` are optional. See [The Mod trait](../rust/mod-trait.md). |
+| `trait Mod: Send + 'static` | Your mod. `fn init() -> Self` is required (runs before the game's `Main`); `fn loaded(&mut self)` (the game has loaded its content and mods), `fn frame(&mut self, player_time: f64, dt: f64)`, `fn gui(&mut self, dt: f64)`, `fn menu(&mut self)`, `fn unload(&mut self)` are optional. See [The Mod trait](../rust/mod-trait.md). |
 | `oxidizer_mod!(Type)` | Registers `Type` as the library's mod: exports the functions Oxidizer calls and catches panics in them. Once per library. |
-| `const API_VERSION: u32` | The API version the crate is built for (3 in 0.4). Oxidizer refuses mods built for a newer version than it has. |
+| `const API_VERSION: u32` | The API version the crate is built for (4 in 0.5). Oxidizer refuses mods built for a newer version than it has. |
 
 ## Game objects: `Obj`
 

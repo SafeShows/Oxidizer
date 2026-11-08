@@ -45,6 +45,8 @@ pub struct Host {
     /// UTF-8 instance folder, empty for the normal Documents folder.
     instance: *const u8,
     instance_len: usize,
+    /// After the game loaded its content and mods.
+    loaded: extern "C" fn(),
 }
 
 struct RustMod {
@@ -52,6 +54,7 @@ struct RustMod {
     gui: Option<extern "C" fn(f64)>,
     menu: Option<extern "C" fn()>,
     unload: Option<extern "C" fn()>,
+    loaded: Option<extern "C" fn()>,
 }
 
 static RUST_MODS: OnceLock<Vec<RustMod>> = OnceLock::new();
@@ -101,6 +104,20 @@ extern "C" fn api_rhai_result(buf: *mut u8, cap: usize) -> usize {
     EVAL_RESULT.with_borrow(|r| write_out(r, buf, cap))
 }
 
+/// Whether the game has finished loading: script mods that start later get loaded() right after init().
+pub(crate) static LOADED: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
+extern "C" fn on_loaded() {
+    if LOADED.swap(true, std::sync::atomic::Ordering::Relaxed) {
+        return; // once, even if the game loads its mods again
+    }
+    log("game loaded");
+    for m in RUST_MODS.get().into_iter().flatten() {
+        m.loaded.map(|f| f());
+    }
+    script::call_all("loaded", ());
+}
+
 extern "C" fn on_frame(t: f64, dt: f64) {
     script::reload_changed();
     for m in RUST_MODS.get().into_iter().flatten() {
@@ -139,7 +156,7 @@ pub unsafe fn attach(bridge_init: BridgeInit, instance: &str) -> Result<(), Stri
     let instance: &'static str = Box::leak(instance.into());
     unsafe {
         (&raw mut (*api.as_mut_ptr()).log).write(api_log);
-        let host = Host { frame: on_frame, gui: on_gui, menu: on_menu, instance: instance.as_ptr(), instance_len: instance.len() };
+        let host = Host { frame: on_frame, gui: on_gui, menu: on_menu, instance: instance.as_ptr(), instance_len: instance.len(), loaded: on_loaded };
         if bridge_init(api.as_mut_ptr(), &host, internals.as_mut_ptr()) == 0 {
             return Err("bridge init failed".into());
         }
@@ -269,6 +286,7 @@ unsafe fn load_rust_mod(path: &Path, api: &'static Api) -> Result<RustMod, Box<d
             gui: lib.get(b"oxidizer_gui\0").ok().map(|s| *s),
             menu: lib.get(b"oxidizer_menu\0").ok().map(|s| *s),
             unload: lib.get(b"oxidizer_unload\0").ok().map(|s| *s),
+            loaded: lib.get(b"oxidizer_loaded\0").ok().map(|s| *s),
         };
         std::mem::forget(lib); // mods stay loaded for the process lifetime (hooks may point into them)
         init(api);

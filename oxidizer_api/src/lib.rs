@@ -17,7 +17,8 @@ pub mod imgui;
 /// the loader runs mods built for its version or an older one, and refuses newer ones.
 /// Version 2 added hook results, keys, typed-binding calls and 64-bit integers.
 /// Version 3 added reading the log and mod status, and running Rhai code.
-pub const API_VERSION: u32 = 3;
+/// Version 4 added `Mod::loaded`.
+pub const API_VERSION: u32 = 4;
 
 /// .NET GCHandle. 0 = null.
 pub type Handle = usize;
@@ -310,7 +311,11 @@ pub fn rhai_eval(code: &str) -> Result<String, String> {
 
 /// Implement and register with [`oxidizer_mod!`].
 pub trait Mod: Send + 'static {
+    /// When the mod starts: before the game's `Main`, so before the game has loaded anything.
     fn init() -> Self;
+    /// Once the game has loaded its content and mods (after `KSA.ModLibrary.LoadAll`): the place for setup that
+    /// needs the game's data.
+    fn loaded(&mut self) {}
     /// After `KSA.Program.OnFrame`.
     fn frame(&mut self, _player_time: f64, _dt: f64) {}
     /// Inside the ImGui frame; draw windows here with [`imgui`].
@@ -362,6 +367,10 @@ macro_rules! oxidizer_mod {
         #[unsafe(no_mangle)]
         pub extern "C" fn oxidizer_menu() {
             __oxidizer_with("menu", |m| $crate::Mod::menu(m))
+        }
+        #[unsafe(no_mangle)]
+        pub extern "C" fn oxidizer_loaded() {
+            __oxidizer_with("loaded", |m| $crate::Mod::loaded(m))
         }
         #[unsafe(no_mangle)]
         pub extern "C" fn oxidizer_unload() {

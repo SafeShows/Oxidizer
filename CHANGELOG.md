@@ -7,6 +7,8 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ### Added
 
+- `loaded()`: a callback once the game has loaded its content and mods (after `KSA.ModLibrary.LoadAll`, the moment of StarMap's `AllModsLoaded`), for Rhai (`fn loaded()`) and Rust (`Mod::loaded`, `oxidizer_api` 0.5, API version 4). `init` stays where it was, before the game's `Main`. A Rhai mod that starts later gets `loaded()` right after `init()`.
+- More ImGui for Rhai: `text_colored`, `input_text`, `input_multiline`, `input_float`, tabs (`begin_tab_bar`, `begin_tab`), `begin_child`, `set_next_window_size` and `ctrl_shortcut`.
 - Dependencies and load order between mods, in `mod.toml`'s `[oxidizer]` section: `dependencies` (each optional or required, with optional `min` / `max` versions), `load_after`, and the mod's own `version`. Mods start in dependency order, Rust and Rhai mods in one order; a mod whose dependencies aren't met doesn't start and **Mods > Oxidizer** says why. Rhai mods waiting for a dependency start as soon as it's there.
 - `oxidizer --bindgen <file>.json` writes the game's API as data: every type and member with its C# signature, its Rust binding and its Rhai form. The [modding guide](https://safeshows.github.io/Oxidizer/)'s Game API page is built from it.
 

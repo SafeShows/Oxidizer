@@ -10,7 +10,8 @@ Functions your script defines; Oxidizer calls them. All are optional. See [Callb
 
 | Callback | Called |
 |---|---|
-| `init()` | Once, when the mod starts (not again on hot reload). |
+| `init()` | Once, when the mod starts, before the game's `Main` (not again on hot reload). |
+| `loaded()` | Once the game has loaded its content and mods (0.8+). Mods that start later get it right after `init()`. |
 | `frame(t: float, dt: float)` | Every frame. `t`: the game's player time; `dt`: seconds since the last frame. |
 | `gui(dt: float)` | Every frame, inside the ImGui frame. |
 | `menu()` | While the game's **Mods** menu is open. |
@@ -89,6 +90,15 @@ See [Hooks](../rhai/hooks.md).
 | `same_line()` | `()` | The next widget goes on the same line. |
 | `separator()` | `()` | A horizontal line. |
 | `header(label: String)` | `bool` | A collapsible section; true while open. |
+| `text_colored(color: Array, s: String)` | `()` | Text in a color, `[r, g, b]` or `[r, g, b, a]` (0..1). 0.8+. |
+| `input_text(label: String, text: String)` | `String` | A one-line text field; returns the edited text. 0.8+. |
+| `input_multiline(label: String, text: String, width: float, height: float)` | `String` | A multi-line text box; returns the edited text. 0.8+. |
+| `input_float(label: String, value: float)` | `float` | A number field; returns the new value. 0.8+. |
+| `begin_tab_bar(id: String)` / `end_tab_bar()` | `bool` / `()` | Tabs; `end_tab_bar()` only when it returned true. 0.8+. |
+| `begin_tab(label: String)` / `end_tab()` | `bool` / `()` | A tab; true while selected, then `end_tab()`. 0.8+. |
+| `begin_child(id: String, height: float)` / `end_child()` | `bool` / `()` | A scrolling region; always call `end_child()`. 0.8+. |
+| `set_next_window_size(width: float, height: float)` | `()` | The next window's first size. 0.8+. |
+| `ctrl_shortcut(key: String)` | `bool` | Ctrl plus the letter this frame, also while typing. 0.8+. |
 
 ## The Mods menu (inside `menu`)
 
