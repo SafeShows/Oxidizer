@@ -70,7 +70,7 @@ cargo build --release
 
 Then copy `mod/mod.toml` to `mods/my_mod/mod.toml`, and the library from `target/release/` (`my_mod.dll`, `libmy_mod.so` or `libmy_mod.dylib`) to `mods/my_mod/bin/`. The template's `install.ps1` (Windows) and `install.sh` (Linux, macOS) do both.
 
-Rust mods load when the game starts: quit the game before installing a new build (Windows keeps a loaded library locked), then start it again. **Mods > Oxidizer** shows whether the mod loaded and its log lines.
+You don't need to quit the game to install a new build (Oxidizer 0.10 and later): within about a second of the library changing, Oxidizer reloads the mod. See [hot reload](mod-trait.md#hot-reload). **Mods > Oxidizer** shows whether the mod loaded and its log lines.
 
 ## Versions
 

@@ -410,6 +410,16 @@ public static unsafe class Bridge
         catch (Exception e) { Error($"patch {Str(ty, tyLen)}.{Str(m, mLen)}", e); return 0; }
     }
 
+    /// Removes a hook (callback and user value) from every method: a Rust mod being reloaded. The Harmony patch
+    /// stays; a method without hooks left just runs as before.
+    [UnmanagedCallersOnly]
+    internal static void Unhook(nint cb, nint user)
+    {
+        lock (Hooks)
+            foreach (var (method, list) in Hooks)
+                Hooks[method] = [.. list.Where(h => h.cb != cb || h.user != user)];
+    }
+
     [UnmanagedCallersOnly]
     static nuint DocsPath(byte* buf, nuint cap)
     {

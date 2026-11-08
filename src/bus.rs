@@ -21,7 +21,8 @@ const RECENT: usize = 30;
 
 #[derive(Clone)]
 pub enum Target {
-    Rust { cb: BusFn, user: usize },
+    /// `owner`: the mod that subscribed, so a hot reload can take its subscriptions out.
+    Rust { cb: BusFn, user: usize, owner: String },
     Rhai { script: String, function: String },
 }
 
@@ -137,6 +138,13 @@ pub fn unsubscribe(id: u64) {
     bus().subs.retain(|s| s.id != id);
 }
 
+/// Takes out a Rust mod's subscriptions and services (before it is reloaded).
+pub fn forget(owner: &str) {
+    let mut b = bus();
+    b.subs.retain(|s| !matches!(&s.target, Target::Rust { owner: o, .. } if o == owner));
+    b.services.retain(|_, (o, p)| !(o == owner && matches!(p, Provider::Rust { .. })));
+}
+
 pub fn unsubscribe_target(topic: &str, target: &Target) {
     bus().subs.retain(|s| !(s.topic == topic && s.target.same_rhai(target)));
 }
@@ -153,7 +161,7 @@ pub fn deliver() {
     for (topic, json, only) in batch {
         for s in subs.iter().filter(|s| s.topic == topic && only.is_none_or(|o| o == s.id)) {
             match &s.target {
-                Target::Rust { cb, user } => {
+                Target::Rust { cb, user, .. } => {
                     // A callback may have unsubscribed another (and freed its data) during this delivery.
                     if bus().subs.iter().any(|x| x.id == s.id) {
                         cb(*user, json.as_ptr(), json.len());
@@ -246,8 +254,8 @@ pub extern "C" fn api_publish(c: *const u8, cn: usize, t: *const u8, tn: usize, 
     }
 }
 
-pub extern "C" fn api_subscribe(_c: *const u8, _cn: usize, t: *const u8, tn: usize, cb: BusFn, user: usize) -> u64 {
-    subscribe(text(t, tn), Target::Rust { cb, user }).unwrap_or_else(|e| {
+pub extern "C" fn api_subscribe(c: *const u8, cn: usize, t: *const u8, tn: usize, cb: BusFn, user: usize) -> u64 {
+    subscribe(text(t, tn), Target::Rust { cb, user, owner: text(c, cn).into() }).unwrap_or_else(|e| {
         set_last(e);
         0
     })
@@ -293,5 +301,27 @@ mod tests {
         assert!(owns("weather", "weather.").is_err());
         assert!(owns("", "weather.changed").is_err());
         assert!(owns("weather", "other.changed").is_err());
+    }
+
+    #[test]
+    fn forget_takes_out_a_rust_mods_subscriptions_and_services() {
+        use super::*;
+        extern "C" fn on_event(_: usize, _: *const u8, _: usize) {}
+        extern "C" fn serve(_: usize, _: *const u8, _: usize) -> u8 {
+            1
+        }
+        let mine = Target::Rust { cb: on_event, user: 0, owner: "hot_a".into() };
+        let other = Target::Rust { cb: on_event, user: 0, owner: "hot_b".into() };
+        subscribe("hot_test.topic", mine).unwrap();
+        subscribe("hot_test.topic", other).unwrap();
+        provide("hot_a", "hot_a.svc", Provider::Rust { cb: serve, user: 0 }).unwrap();
+        forget("hot_a");
+        let b = bus();
+        let owners: Vec<&str> = b.subs.iter().filter_map(|s| match &s.target {
+            Target::Rust { owner, .. } if s.topic == "hot_test.topic" => Some(owner.as_str()),
+            _ => None,
+        }).collect();
+        assert_eq!(owners, ["hot_b"]);
+        assert!(!b.services.contains_key("hot_a.svc"));
     }
 }

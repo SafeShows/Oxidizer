@@ -110,6 +110,7 @@ Also in `oxidizer_api`:
 - `config_path("my_mod")` is where to keep your settings: `<documents>/oxidizer/my_mod.toml`, outside the mod folder so updating the mod doesn't lose them.
 - `log_lines(from)` / `log_next()` read Oxidizer's log, `mod_statuses()` says which mods run and why others don't, and `rhai_eval(code)` runs Rhai against the live game with the access Rhai mods have (variables persist between calls). `mods_dir()` is the game's mods folder. (Oxidizer 0.7.0 or later.)
 - Events and services between mods (Rust and Rhai): `publish` / `subscribe` typed `Event`s, `provide` / `call` typed `Service`s. See [Events and services](https://safeshows.github.io/Oxidizer/events/). (Oxidizer 0.9.0 or later.)
+- Rust mods reload while the game runs (Oxidizer 0.10.0 or later): copy a new build into the mod's `bin/` folder and within a second its `unload` runs, its hooks, subscriptions and services are removed, and the new build starts with `init`. Each mod runs from a copy, so the file isn't locked.
 - `imgui` has text fields (`input_text`, `input_text_multiline` with a `TextBuffer`), tabs (`begin_tab_bar`, `begin_tab_item`) and `ctrl_shortcut('s')`, which also sees keys typed into a text field.
 
 #### Typed bindings

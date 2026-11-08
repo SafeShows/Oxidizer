@@ -14,6 +14,7 @@ public unsafe struct Internal
 {
     public delegate* unmanaged<byte*, nuint, nuint> Describe;
     public delegate* unmanaged<nint, byte> Kind;
+    public delegate* unmanaged<nint, nint, void> Unhook;
 }
 
 public static unsafe class Describer
@@ -25,6 +26,7 @@ public static unsafe class Describer
     {
         i->Describe = &Describe;
         i->Kind = &Kind;
+        i->Unhook = &Bridge.Unhook;
     }
 
     /// The public types and members of KSA.dll, one per line, tab-separated:

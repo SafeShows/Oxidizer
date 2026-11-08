@@ -8,10 +8,10 @@
 mod bus;
 mod ksa_rhai;
 mod mods;
+mod rust_mods;
 mod script;
 mod ui;
 
-use libloading::Library;
 use oxidizer_api::{Api, imgui};
 use std::mem::MaybeUninit;
 use std::path::{Path, PathBuf};
@@ -29,6 +29,8 @@ pub struct Internal {
     pub describe: extern "C" fn(*mut u8, usize) -> usize,
     /// 0 null, 1 bool, 2 integer or enum, 3 floating point, 4 string, 5 other object.
     pub kind: extern "C" fn(oxidizer_api::Handle) -> u8,
+    /// Removes a hook (its callback and user value) from every method it patches.
+    pub unhook: extern "C" fn(usize, usize),
 }
 
 static INTERNAL: OnceLock<&'static Internal> = OnceLock::new();
@@ -49,16 +51,6 @@ pub struct Host {
     /// After the game loaded its content and mods.
     loaded: extern "C" fn(),
 }
-
-struct RustMod {
-    frame: Option<extern "C" fn(f64, f64)>,
-    gui: Option<extern "C" fn(f64)>,
-    menu: Option<extern "C" fn()>,
-    unload: Option<extern "C" fn()>,
-    loaded: Option<extern "C" fn()>,
-}
-
-static RUST_MODS: OnceLock<Vec<RustMod>> = OnceLock::new();
 
 pub fn log(s: &str) {
     println!("[oxidizer] {s}");
@@ -113,25 +105,20 @@ extern "C" fn on_loaded() {
         return; // once, even if the game loads its mods again
     }
     log("game loaded");
-    for m in RUST_MODS.get().into_iter().flatten() {
-        m.loaded.map(|f| f());
-    }
+    rust_mods::call_loaded();
     script::call_all("loaded", ());
 }
 
 extern "C" fn on_frame(t: f64, dt: f64) {
     script::reload_changed();
+    rust_mods::reload_changed();
     bus::deliver(); // events published since the last frame, before mods' frame()
-    for m in RUST_MODS.get().into_iter().flatten() {
-        m.frame.map(|f| f(t, dt));
-    }
+    rust_mods::call_frame(t, dt);
     script::call_all("frame", (t, dt));
 }
 
 extern "C" fn on_gui(dt: f64) {
-    for m in RUST_MODS.get().into_iter().flatten() {
-        m.gui.map(|f| f(dt));
-    }
+    rust_mods::call_gui(dt);
     script::call_all("gui", (dt,));
     ui::draw();
 }
@@ -140,9 +127,7 @@ extern "C" fn on_gui(dt: f64) {
 extern "C" fn on_menu() {
     if imgui::begin_menu("Mods") {
         ui::menu_item();
-        for m in RUST_MODS.get().into_iter().flatten() {
-            m.menu.map(|f| f());
-        }
+        rust_mods::call_menu();
         script::call_all("menu", ());
         imgui::end_menu();
     }
@@ -191,9 +176,7 @@ pub unsafe fn attach(bridge_init: BridgeInit, instance: &str) -> Result<(), Stri
 pub fn shutdown() {
     static DONE: Once = Once::new();
     DONE.call_once(|| {
-        for m in RUST_MODS.get().into_iter().flatten() {
-            m.unload.map(|f| f());
-        }
+        rust_mods::call_unload();
         script::call_all("unload", ());
         script::save_settings();
     });
@@ -229,6 +212,7 @@ fn load_mods(api: &'static Api) {
     if !mods_dir.is_dir() {
         return log(&format!("no mods folder in {}", docs.display()));
     }
+    rust_mods::setup(api, &docs);
     let disabled = mods::disabled_mods(&docs.join("manifest.toml"));
     for id in fs::read_dir(&mods_dir).into_iter().flatten().flatten().filter_map(|e| mods::read(&e.path())).map(|e| e.id) {
         if disabled.contains(&id) {
@@ -241,7 +225,6 @@ fn load_mods(api: &'static Api) {
         log(&format!("dependency cycle between {}: starting them in folder order", cycle.join(", ")));
     }
     let oxidizer: HashSet<String> = ordered.iter().map(|e| e.id.clone()).collect();
-    let mut rust = vec![];
     for e in &ordered {
         if let Err(why) = mods::check(e, &mods_dir, &oxidizer) {
             mods::mark_waiting(e, why);
@@ -249,11 +232,10 @@ fn load_mods(api: &'static Api) {
         }
         let mut ok = true;
         if let Some(dll) = &e.dll {
-            match unsafe { load_rust_mod(&mod_library(&e.dir, dll), api, &e.id) } {
-                Ok(m) => {
+            match rust_mods::start(&e.id, &mod_library(&e.dir, dll)) {
+                Ok(()) => {
                     log(&format!("loaded rust mod {}", e.id));
                     ui::set_status(&e.id, "Rust", None);
-                    rust.push(m);
                 }
                 Err(err) => {
                     log(&format!("{}: {err}", e.id));
@@ -269,7 +251,6 @@ fn load_mods(api: &'static Api) {
             mods::mark_started(e);
         }
     }
-    let _ = RUST_MODS.set(rust);
 }
 
 /// `dll` as written if that file exists, otherwise this platform's library file for its stem in the same folder,
@@ -282,32 +263,4 @@ fn mod_library(dir: &Path, dll: &str) -> PathBuf {
     let folder = exact.parent().unwrap_or(dir);
     let stem = exact.file_stem().unwrap_or(dll.as_ref());
     folder.join(libloading::library_filename(stem))
-}
-
-/// Loads a Rust mod and runs its init, giving it its own copy of the API table with its id, so the bus knows who
-/// calls (also from hooks, outside any Oxidizer callback).
-unsafe fn load_rust_mod(path: &Path, api: &'static Api, id: &str) -> Result<RustMod, Box<dyn std::error::Error>> {
-    unsafe {
-        let lib = Library::new(path)?;
-        let version: extern "C" fn() -> u32 = *lib.get(b"oxidizer_api_version\0")?;
-        // Older mods only use the start of the table, which never changes; newer ones need a newer loader.
-        if version() == 0 || version() > oxidizer_api::API_VERSION {
-            return Err(format!("built for API v{}, this Oxidizer supports up to v{}; update Oxidizer", version(), oxidizer_api::API_VERSION).into());
-        }
-        let init: extern "C" fn(&'static Api) = *lib.get(b"oxidizer_init\0")?;
-        let m = RustMod {
-            frame: lib.get(b"oxidizer_frame\0").ok().map(|s| *s),
-            gui: lib.get(b"oxidizer_gui\0").ok().map(|s| *s),
-            menu: lib.get(b"oxidizer_menu\0").ok().map(|s| *s),
-            unload: lib.get(b"oxidizer_unload\0").ok().map(|s| *s),
-            loaded: lib.get(b"oxidizer_loaded\0").ok().map(|s| *s),
-        };
-        std::mem::forget(lib); // mods stay loaded for the process lifetime (hooks may point into them)
-        let id: &'static str = Box::leak(id.into());
-        let mut table = std::ptr::read(api);
-        table.mod_id = id.as_ptr();
-        table.mod_id_len = id.len();
-        init(Box::leak(Box::new(table)));
-        Ok(m)
-    }
 }

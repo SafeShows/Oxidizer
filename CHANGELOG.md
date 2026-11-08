@@ -5,6 +5,16 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ## [Unreleased]
 
+## [0.10.0] - 2026-11-08
+
+### Added
+
+- Hot reload for Rust mods: rebuild a mod and copy its library into the mod folder while the game runs, and within about a second Oxidizer runs its `unload`, removes its hooks, event subscriptions and services, and starts the new build (`init`, then `loaded` if the game has loaded). If the new build can't load, the running one stays. Works with mods built with any `oxidizer_api` version.
+
+### Changed
+
+- Rust mods run from a copy of their library in `<documents>/oxidizer/loaded/`, so the file in the mod folder isn't locked while the game runs.
+
 ## [0.9.1] - 2026-11-08
 
 ### Fixed
@@ -159,7 +169,8 @@ First release.
 - When a method has several overloads, `call` and patching use the first one with a matching number of arguments.
 - Hooks can't read or change a patched method's return value.
 
-[Unreleased]: https://github.com/SafeShows/Oxidizer/compare/v0.9.1...HEAD
+[Unreleased]: https://github.com/SafeShows/Oxidizer/compare/v0.10.0...HEAD
+[0.10.0]: https://github.com/SafeShows/Oxidizer/compare/v0.9.1...v0.10.0
 [0.9.1]: https://github.com/SafeShows/Oxidizer/compare/v0.9.0...v0.9.1
 [0.9.0]: https://github.com/SafeShows/Oxidizer/compare/v0.8.0...v0.9.0
 [0.8.0]: https://github.com/SafeShows/Oxidizer/compare/v0.7.0...v0.8.0

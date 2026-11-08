@@ -357,6 +357,8 @@ pub trait Mod: Send + 'static {
     fn gui(&mut self, _dt: f64) {}
     /// Inside the "Mods" menu of the game's menu bar; add entries with [`imgui::menu_item`].
     fn menu(&mut self) {}
+    /// When the game closes, and before a hot reload replaces this mod with a new build: save what should survive,
+    /// and stop threads the mod started.
     fn unload(&mut self) {}
 }
 
