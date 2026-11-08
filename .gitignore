@@ -1,3 +1,6 @@
 /target
 /bridge/bin
 /bridge/obj
+
+# mdBook output
+/book/book
