@@ -7,6 +7,7 @@ use crate::{log, ui};
 use oxidizer_api::{Handle, Obj, imgui};
 use rhai::{Array, CallFnOptions, Dynamic, Engine, EvalAltResult, FuncArgs, Map, Scope, AST};
 use std::cell::Cell;
+use std::collections::HashSet;
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex, MutexGuard, OnceLock, TryLockError};
@@ -110,18 +111,15 @@ fn report(name: &str, problem: String) {
     ui::set_status(name, KIND, Some(problem));
 }
 
-pub fn load(list: Vec<(String, PathBuf)>) {
-    if list.is_empty() {
-        return; // the engine is built when a script mod or the console first needs it
-    }
+/// Loads one script mod and runs its init(); true when it started without an error. The engine is built when the
+/// first script mod (or the console) needs it. A script that fails stays in the list: saving a fixed file starts it.
+pub fn start_mod(name: &str, path: &Path) -> bool {
     let s = scripts();
-    let added: Vec<usize> = list.into_iter().map(|(name, path)| add(s, name, path)).collect();
-    let mods = mods();
-    for i in added {
-        if let Some(mut m) = lock(&mods[i]) {
-            start(&s.engine, i, &mut m);
-        }
-    }
+    let i = add(s, name.to_string(), path.to_path_buf());
+    let Some(script) = mods().get(i).cloned() else { return false };
+    let Some(mut m) = lock(&script) else { return false };
+    start(&s.engine, i, &mut m);
+    m.started
 }
 
 /// Compiles a script mod and adds it (with its settings) to the list; returns its index. A script that doesn't
@@ -149,15 +147,22 @@ fn add(s: &Scripts, name: String, path: PathBuf) -> usize {
 }
 
 /// Starts script mods that appeared in the mods folder while the game runs (e.g. made by an in-game editor).
+/// Also starts script mods whose dependencies were missing, once they are met.
 fn start_new() {
     let known = SCRIPTS.get().map(|s| s.names.lock().unwrap_or_else(|e| e.into_inner()).clone()).unwrap_or_default();
-    for (name, path) in crate::script_mods().into_iter().filter(|(n, _)| !known.contains(n)) {
-        let s = scripts();
-        log(&format!("new script mod {name}"));
-        let i = add(s, name, path);
-        if let Some(mut m) = mods().get(i).and_then(|m| lock(m)) {
-            start(&s.engine, i, &mut m);
+    let mods_dir = oxidizer_api::mods_dir();
+    let all = crate::mods::scan(&mods_dir);
+    let oxidizer: HashSet<String> = all.iter().map(|e| e.id.clone()).collect();
+    let (ordered, _) = crate::mods::order(all);
+    // Only Rhai mods: Rust mods load when the game starts.
+    for e in ordered.iter().filter(|e| e.dll.is_none() && !known.contains(&e.id)) {
+        let Some(script) = &e.script else { continue };
+        if let Err(why) = crate::mods::check(e, &mods_dir, &oxidizer) {
+            crate::mods::mark_waiting(e, why);
+            continue;
         }
+        log(&format!("new script mod {}", e.id));
+        start_mod(&e.id, script);
     }
 }
 
@@ -188,6 +193,7 @@ fn start(engine: &Engine, i: usize, m: &mut Script) {
     m.started = !m.dead;
     if m.started {
         ui::set_status(&m.name, KIND, None);
+        crate::mods::mark_started_id(&m.name); // mods that depend on it can start now
     }
 }
 

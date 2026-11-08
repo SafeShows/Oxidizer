@@ -12,7 +12,15 @@ script = "main.rhai"   # a Rhai mod: the script, relative to the folder
 dll = "bin/my_mod"     # a Rust mod: the library; the platform's prefix and extension are added if this file doesn't exist
 ```
 
-A mod may have both. A folder without `[oxidizer]` isn't an Oxidizer mod (it may be a C# or content mod). The folder name is the mod's id.
+Optional keys of `[oxidizer]` (Oxidizer 0.8 and later; see [Dependencies and load order](../mod-folders.md#dependencies-and-load-order)):
+
+| Key | |
+|---|---|
+| `version = "1.2.0"` | This mod's version, for mods that depend on it with `min` / `max`. |
+| `dependencies = [...]` | Mods to start after. Each is `"id"` or `{ id = "id", optional = true, min = "1.0", max = "2.0" }`; `optional` defaults to false, the bounds are inclusive. |
+| `load_after = ["id", ...]` | Mods to start after when they're installed, without needing them. |
+
+A mod may have both `dll` and `script`. A folder without `[oxidizer]` isn't an Oxidizer mod (it may be a C# or content mod). The folder name is the mod's id.
 
 ## `oxidizer.toml` (standalone)
 

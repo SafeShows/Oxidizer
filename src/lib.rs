@@ -6,6 +6,7 @@
 //! Either way the bridge's `Init` is handed in, the Api table is filled, and the mods are loaded.
 
 mod ksa_rhai;
+mod mods;
 mod script;
 mod ui;
 
@@ -14,6 +15,7 @@ use oxidizer_api::{Api, imgui};
 use std::mem::MaybeUninit;
 use std::path::{Path, PathBuf};
 use std::sync::{Once, OnceLock};
+use std::collections::HashSet;
 use std::fs;
 
 /// `Bridge.Init` from bridge/Bridge.cs.
@@ -189,56 +191,56 @@ pub extern "C" fn oxidizer_shutdown() {
     let _ = std::panic::catch_unwind(shutdown);
 }
 
-/// Mod folder = `<Documents>/My Games/Kitten Space Agency/mods/<id>/mod.toml` with
-/// `[oxidizer] dll = "x"` and/or `script = "main.rhai"`. Respects `enabled = false` in manifest.toml.
+/// Mod folder = `<Documents>/My Games/Kitten Space Agency/mods/<id>/mod.toml` with `[oxidizer] dll = "x"` and/or
+/// `script = "main.rhai"`. Mods start in dependency order (see mods.rs), Rust and Rhai mods alike, and a mod whose
+/// dependencies aren't met doesn't start. Mods disabled in manifest.toml are skipped.
 fn load_mods(api: &'static Api) {
     let docs = PathBuf::from(oxidizer_api::read_string(|b, c| (api.docs_path)(b, c)));
-    let disabled = disabled_mods(&docs.join("manifest.toml"));
-    let mut rust = vec![];
-    let Ok(dirs) = fs::read_dir(docs.join("mods")) else {
+    let mods_dir = docs.join("mods");
+    if !mods_dir.is_dir() {
         return log(&format!("no mods folder in {}", docs.display()));
-    };
-    for dir in dirs.flatten().map(|e| e.path()) {
-        let id = dir.file_name().unwrap().to_string_lossy().into_owned();
-        let Some(cfg) = fs::read_to_string(dir.join("mod.toml")).ok().and_then(|s| s.parse::<toml::Table>().ok()) else { continue };
-        let Some(section) = cfg.get("oxidizer").and_then(|v| v.as_table()) else { continue };
+    }
+    let disabled = mods::disabled_mods(&docs.join("manifest.toml"));
+    for id in fs::read_dir(&mods_dir).into_iter().flatten().flatten().filter_map(|e| mods::read(&e.path())).map(|e| e.id) {
         if disabled.contains(&id) {
             log(&format!("{id}: disabled in manifest"));
             ui::set_status(&id, "mod", Some("disabled in the game's mod list".into()));
+        }
+    }
+    let (ordered, cycle) = mods::order(mods::scan(&mods_dir));
+    if !cycle.is_empty() {
+        log(&format!("dependency cycle between {}: starting them in folder order", cycle.join(", ")));
+    }
+    let oxidizer: HashSet<String> = ordered.iter().map(|e| e.id.clone()).collect();
+    let mut rust = vec![];
+    for e in &ordered {
+        if let Err(why) = mods::check(e, &mods_dir, &oxidizer) {
+            mods::mark_waiting(e, why);
             continue;
         }
-        if let Some(dll) = section.get("dll").and_then(|v| v.as_str()) {
-            match unsafe { load_rust_mod(&mod_library(&dir, dll), api) } {
+        let mut ok = true;
+        if let Some(dll) = &e.dll {
+            match unsafe { load_rust_mod(&mod_library(&e.dir, dll), api) } {
                 Ok(m) => {
-                    log(&format!("loaded rust mod {id}"));
-                    ui::set_status(&id, "Rust", None);
+                    log(&format!("loaded rust mod {}", e.id));
+                    ui::set_status(&e.id, "Rust", None);
                     rust.push(m);
                 }
-                Err(e) => {
-                    log(&format!("{id}: {e}"));
-                    ui::set_status(&id, "Rust", Some(e.to_string()));
+                Err(err) => {
+                    log(&format!("{}: {err}", e.id));
+                    ui::set_status(&e.id, "Rust", Some(err.to_string()));
+                    ok = false;
                 }
             }
         }
+        if let Some(script) = &e.script {
+            ok &= script::start_mod(&e.id, script);
+        }
+        if ok {
+            mods::mark_started(e);
+        }
     }
     let _ = RUST_MODS.set(rust);
-    script::load(script_mods());
-}
-
-/// Every enabled script mod: (id, script file). Also read while the game runs, to start new script mods.
-pub(crate) fn script_mods() -> Vec<(String, PathBuf)> {
-    let mods = oxidizer_api::mods_dir();
-    let disabled = mods.parent().map(|d| disabled_mods(&d.join("manifest.toml"))).unwrap_or_default();
-    let Ok(dirs) = fs::read_dir(&mods) else { return vec![] };
-    dirs.flatten()
-        .map(|e| e.path())
-        .filter_map(|dir| {
-            let id = dir.file_name()?.to_string_lossy().into_owned();
-            let cfg = fs::read_to_string(dir.join("mod.toml")).ok()?.parse::<toml::Table>().ok()?;
-            let script = cfg.get("oxidizer")?.get("script")?.as_str()?.to_string();
-            (!disabled.contains(&id)).then(|| (id, dir.join(script)))
-        })
-        .collect()
 }
 
 /// `dll` as written if that file exists, otherwise this platform's library file for its stem in the same folder,
@@ -251,14 +253,6 @@ fn mod_library(dir: &Path, dll: &str) -> PathBuf {
     let folder = exact.parent().unwrap_or(dir);
     let stem = exact.file_stem().unwrap_or(dll.as_ref());
     folder.join(libloading::library_filename(stem))
-}
-
-fn disabled_mods(manifest: &Path) -> Vec<String> {
-    let Some(t) = fs::read_to_string(manifest).ok().and_then(|s| s.parse::<toml::Table>().ok()) else { return vec![] };
-    t.get("mods").and_then(|m| m.as_array()).into_iter().flatten()
-        .filter(|m| m.get("enabled").and_then(|e| e.as_bool()) == Some(false))
-        .filter_map(|m| m.get("id")?.as_str().map(String::from))
-        .collect()
 }
 
 unsafe fn load_rust_mod(path: &Path, api: &'static Api) -> Result<RustMod, Box<dyn std::error::Error>> {
