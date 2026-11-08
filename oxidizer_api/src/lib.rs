@@ -16,7 +16,8 @@ pub mod imgui;
 /// ABI version of [`Api`] and the mod exports. Bump when the table grows or changes;
 /// the loader runs mods built for its version or an older one, and refuses newer ones.
 /// Version 2 added hook results, keys, typed-binding calls and 64-bit integers.
-pub const API_VERSION: u32 = 2;
+/// Version 3 added reading the log and mod status, and running Rhai code.
+pub const API_VERSION: u32 = 3;
 
 /// .NET GCHandle. 0 = null.
 pub type Handle = usize;
@@ -62,6 +63,16 @@ pub struct Api {
     pub ksa_version: extern "C" fn(*mut u8, usize) -> usize,
     pub as_i64: extern "C" fn(Handle, *mut i64) -> u8,
     pub box_i64: extern "C" fn(i64) -> Handle,
+    // ---- API version 3 (filled by the loader itself, not the bridge) ----
+    /// Number the next log line will get (log lines are numbered from 0).
+    pub log_next: extern "C" fn() -> u64,
+    /// Log lines from number `from` on that are still kept, joined by '\n'.
+    pub log_read: extern "C" fn(u64, *mut u8, usize) -> usize,
+    /// Every Oxidizer mod: "id\tkind\tproblem" lines, problem empty while it runs.
+    pub mod_status: extern "C" fn(*mut u8, usize) -> usize,
+    /// Run Rhai code in Oxidizer's script engine: 1 when it ran; [`Api::rhai_result`] then has the value, else the error.
+    pub rhai_eval: extern "C" fn(*const u8, usize) -> u8,
+    pub rhai_result: extern "C" fn(*mut u8, usize) -> usize,
 }
 
 static API: OnceLock<&'static Api> = OnceLock::new();
@@ -247,6 +258,54 @@ pub fn config_path(mod_id: &str) -> std::path::PathBuf {
     let dir = std::path::PathBuf::from(read_string(|b, c| (api().docs_path)(b, c))).join("oxidizer");
     let _ = std::fs::create_dir_all(&dir);
     dir.join(format!("{mod_id}.toml"))
+}
+
+/// The game's mods folder, `<game documents>/mods`, where every mod has its folder.
+pub fn mods_dir() -> std::path::PathBuf {
+    std::path::PathBuf::from(read_string(|b, c| (api().docs_path)(b, c))).join("mods")
+}
+
+/// Number the next line of Oxidizer's log will get. Lines are numbered from 0 as they are logged; keep this to
+/// read only what is new with [`log_lines`].
+pub fn log_next() -> u64 {
+    (api().log_next)()
+}
+
+/// Oxidizer's log (what **Mods > Oxidizer** shows) from line number `from` on. Only the last few hundred lines
+/// are kept, so older ones are gone.
+pub fn log_lines(from: u64) -> Vec<String> {
+    let text = read_string(|b, c| (api().log_read)(from, b, c));
+    if text.is_empty() { vec![] } else { text.split('\n').map(String::from).collect() }
+}
+
+/// One Oxidizer mod, as **Mods > Oxidizer** shows it.
+#[derive(Clone, Debug)]
+pub struct ModStatus {
+    /// Its folder name in the mods folder.
+    pub id: String,
+    /// "Rust" or "Rhai".
+    pub kind: String,
+    /// Why it isn't running (failed to load, or stopped after an error), or None while it runs.
+    pub problem: Option<String>,
+}
+
+pub fn mod_statuses() -> Vec<ModStatus> {
+    read_string(|b, c| (api().mod_status)(b, c))
+        .lines()
+        .filter_map(|l| {
+            let mut f = l.splitn(3, '\t');
+            let (id, kind, problem) = (f.next()?, f.next()?, f.next().unwrap_or(""));
+            Some(ModStatus { id: id.into(), kind: kind.into(), problem: (!problem.is_empty()).then(|| problem.into()) })
+        })
+        .collect()
+}
+
+/// Runs Rhai code in Oxidizer's script engine, with the game access Rhai mods have, and returns its value as text
+/// (empty for `()`), or the error. Variables persist between calls, like a console.
+pub fn rhai_eval(code: &str) -> Result<String, String> {
+    let ok = (api().rhai_eval)(code.as_ptr(), code.len()) != 0;
+    let result = read_string(|b, c| (api().rhai_result)(b, c));
+    if ok { Ok(result) } else { Err(result) }
 }
 
 /// Implement and register with [`oxidizer_mod!`].

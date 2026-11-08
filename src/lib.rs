@@ -63,6 +63,42 @@ extern "C" fn api_log(p: *const u8, n: usize) {
     log(&String::from_utf8_lossy(unsafe { std::slice::from_raw_parts(p, n) }));
 }
 
+/// Copies `s` into a caller's buffer (up to `cap` bytes) and returns its full length, as `read_string` expects.
+fn write_out(s: &str, buf: *mut u8, cap: usize) -> usize {
+    let n = s.len().min(cap);
+    unsafe { std::ptr::copy_nonoverlapping(s.as_ptr(), buf, n) };
+    s.len()
+}
+
+extern "C" fn api_log_next() -> u64 {
+    ui::log_next()
+}
+
+extern "C" fn api_log_read(from: u64, buf: *mut u8, cap: usize) -> usize {
+    write_out(&ui::log_from(from), buf, cap)
+}
+
+extern "C" fn api_mod_status(buf: *mut u8, cap: usize) -> usize {
+    write_out(&ui::status_text(), buf, cap)
+}
+
+thread_local! {
+    /// The value or error of the last `rhai_eval` on this thread, for `rhai_result`.
+    static EVAL_RESULT: std::cell::RefCell<String> = const { std::cell::RefCell::new(String::new()) };
+}
+
+extern "C" fn api_rhai_eval(p: *const u8, n: usize) -> u8 {
+    let code = String::from_utf8_lossy(unsafe { std::slice::from_raw_parts(p, n) }).into_owned();
+    let result = std::panic::catch_unwind(|| script::eval(&code)).unwrap_or_else(|_| Err("the script engine panicked".into()));
+    let ok = result.is_ok();
+    EVAL_RESULT.with_borrow_mut(|r| *r = result.unwrap_or_else(|e| e));
+    ok as u8
+}
+
+extern "C" fn api_rhai_result(buf: *mut u8, cap: usize) -> usize {
+    EVAL_RESULT.with_borrow(|r| write_out(r, buf, cap))
+}
+
 extern "C" fn on_frame(t: f64, dt: f64) {
     script::reload_changed();
     for m in RUST_MODS.get().into_iter().flatten() {
@@ -106,6 +142,13 @@ pub unsafe fn attach(bridge_init: BridgeInit, instance: &str) -> Result<(), Stri
             return Err("bridge init failed".into());
         }
         let _ = INTERNAL.set(internals.assume_init_ref());
+        // API version 3: the loader's own functions, after the bridge's part of the table.
+        let p = api.as_mut_ptr();
+        (&raw mut (*p).log_next).write(api_log_next);
+        (&raw mut (*p).log_read).write(api_log_read);
+        (&raw mut (*p).mod_status).write(api_mod_status);
+        (&raw mut (*p).rhai_eval).write(api_rhai_eval);
+        (&raw mut (*p).rhai_result).write(api_rhai_result);
         let api: &'static Api = api.assume_init_ref();
         oxidizer_api::set_api(api);
         load_mods(api);
@@ -152,7 +195,6 @@ fn load_mods(api: &'static Api) {
     let docs = PathBuf::from(oxidizer_api::read_string(|b, c| (api.docs_path)(b, c)));
     let disabled = disabled_mods(&docs.join("manifest.toml"));
     let mut rust = vec![];
-    let mut scripts = vec![];
     let Ok(dirs) = fs::read_dir(docs.join("mods")) else {
         return log(&format!("no mods folder in {}", docs.display()));
     };
@@ -178,12 +220,25 @@ fn load_mods(api: &'static Api) {
                 }
             }
         }
-        if let Some(s) = section.get("script").and_then(|v| v.as_str()) {
-            scripts.push((id.clone(), dir.join(s)));
-        }
     }
     let _ = RUST_MODS.set(rust);
-    script::load(scripts);
+    script::load(script_mods());
+}
+
+/// Every enabled script mod: (id, script file). Also read while the game runs, to start new script mods.
+pub(crate) fn script_mods() -> Vec<(String, PathBuf)> {
+    let mods = oxidizer_api::mods_dir();
+    let disabled = mods.parent().map(|d| disabled_mods(&d.join("manifest.toml"))).unwrap_or_default();
+    let Ok(dirs) = fs::read_dir(&mods) else { return vec![] };
+    dirs.flatten()
+        .map(|e| e.path())
+        .filter_map(|dir| {
+            let id = dir.file_name()?.to_string_lossy().into_owned();
+            let cfg = fs::read_to_string(dir.join("mod.toml")).ok()?.parse::<toml::Table>().ok()?;
+            let script = cfg.get("oxidizer")?.get("script")?.as_str()?.to_string();
+            (!disabled.contains(&id)).then(|| (id, dir.join(script)))
+        })
+        .collect()
 }
 
 /// `dll` as written if that file exists, otherwise this platform's library file for its stem in the same folder,

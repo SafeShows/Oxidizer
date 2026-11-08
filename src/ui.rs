@@ -12,7 +12,8 @@ const GREEN: [f32; 4] = [0.5, 0.9, 0.5, 1.0];
 const GRAY: [f32; 4] = [0.6, 0.6, 0.6, 1.0];
 
 static SHOW: AtomicBool = AtomicBool::new(false);
-static LOG: Mutex<VecDeque<String>> = Mutex::new(VecDeque::new());
+/// The last LOG_LINES lines, and the number the next line gets (lines are numbered from 0).
+static LOG: Mutex<(VecDeque<String>, u64)> = Mutex::new((VecDeque::new(), 0));
 static MODS: Mutex<Vec<Status>> = Mutex::new(Vec::new());
 
 #[derive(Clone)]
@@ -24,11 +25,34 @@ struct Status {
 }
 
 pub fn push_log(line: String) {
-    let mut log = LOG.lock().unwrap_or_else(|e| e.into_inner());
+    let (log, next) = &mut *LOG.lock().unwrap_or_else(|e| e.into_inner());
     if log.len() == LOG_LINES {
         log.pop_front();
     }
     log.push_back(line);
+    *next += 1;
+}
+
+/// Number the next log line gets.
+pub fn log_next() -> u64 {
+    LOG.lock().unwrap_or_else(|e| e.into_inner()).1
+}
+
+/// Kept log lines from number `from` on, joined by '\n'.
+pub fn log_from(from: u64) -> String {
+    let (log, next) = &*LOG.lock().unwrap_or_else(|e| e.into_inner());
+    let first = next - log.len() as u64;
+    let skip = from.saturating_sub(first) as usize;
+    log.iter().skip(skip).cloned().collect::<Vec<_>>().join("\n")
+}
+
+/// Every mod as "id\tkind\tproblem" lines (problem empty while it runs; tabs and line breaks in it become spaces).
+pub fn status_text() -> String {
+    MODS.lock()
+        .unwrap_or_else(|e| e.into_inner())
+        .iter()
+        .map(|m| format!("{}\t{}\t{}\n", m.id, m.kind, m.problem.as_deref().unwrap_or("").replace(['\t', '\n', '\r'], " ")))
+        .collect()
 }
 
 /// Record a mod's state; `problem` None means it is running.
@@ -53,7 +77,7 @@ pub fn draw() {
     }
     // Copies, so nothing that logs while drawing can deadlock on these locks.
     let mods = MODS.lock().unwrap_or_else(|e| e.into_inner()).clone();
-    let log: Vec<String> = LOG.lock().unwrap_or_else(|e| e.into_inner()).iter().cloned().collect();
+    let log: Vec<String> = LOG.lock().unwrap_or_else(|e| e.into_inner()).0.iter().cloned().collect();
 
     let mut open = true;
     imgui::set_next_window_size(560.0, 420.0);

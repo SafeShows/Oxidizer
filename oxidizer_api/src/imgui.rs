@@ -2,7 +2,7 @@
 //! Only valid inside `Mod::gui` (and the menu functions inside `Mod::menu`).
 //! Like Dear ImGui: always call [`end`] after [`begin`], and [`end_child`] after [`begin_child`].
 
-use std::ffi::{CString, c_char};
+use std::ffi::{CString, c_char, c_void};
 use std::sync::OnceLock;
 
 #[repr(C)]
@@ -47,6 +47,16 @@ struct Fns {
     set_scroll_here_y: unsafe extern "C" fn(f32),
     push_style_color: unsafe extern "C" fn(i32, *const ImVec4),
     pop_style_color: unsafe extern "C" fn(i32),
+    // (label, buffer, buffer size, [size,] flags, callback, user data)
+    input_text: unsafe extern "C" fn(S, *mut u8, usize, i32, *const c_void, *mut c_void) -> bool,
+    input_text_multiline: unsafe extern "C" fn(S, *mut u8, usize, *const ImVec2, i32, *const c_void, *mut c_void) -> bool,
+    begin_tab_bar: unsafe extern "C" fn(S, i32) -> bool,
+    end_tab_bar: unsafe extern "C" fn(),
+    begin_tab_item: unsafe extern "C" fn(S, *mut bool, i32) -> bool,
+    end_tab_item: unsafe extern "C" fn(),
+    is_key_down: unsafe extern "C" fn(i32) -> bool,
+    is_key_pressed: unsafe extern "C" fn(i32, bool) -> bool,
+    set_keyboard_focus_here: unsafe extern "C" fn(i32),
 }
 
 fn fns() -> &'static Fns {
@@ -81,6 +91,15 @@ fn fns() -> &'static Fns {
             set_scroll_here_y: sym!("SetScrollHereY"),
             push_style_color: sym!("PushStyleColor_1"),
             pop_style_color: sym!("PopStyleColor"),
+            input_text: sym!("InputText"),
+            input_text_multiline: sym!("InputTextMultiline"),
+            begin_tab_bar: sym!("BeginTabBar"),
+            end_tab_bar: sym!("EndTabBar"),
+            begin_tab_item: sym!("BeginTabItem"),
+            end_tab_item: sym!("EndTabItem"),
+            is_key_down: sym!("IsKeyDown"),
+            is_key_pressed: sym!("IsKeyPressed"),
+            set_keyboard_focus_here: sym!("SetKeyboardFocusHere"),
         };
         std::mem::forget(lib);
         f
@@ -181,4 +200,111 @@ pub fn text_colored(rgba: [f32; 4], s: &str) {
     unsafe { (fns().push_style_color)(COL_TEXT, &ImVec4 { x, y, z, w }) }
     text(s);
     unsafe { (fns().pop_style_color)(1) }
+}
+
+/// Flags for [`input_text`] and [`input_text_multiline`] (ImGuiInputTextFlags), combined with `|`.
+pub mod text_flags {
+    /// Tab types a tab character instead of moving to the next field.
+    pub const ALLOW_TAB_INPUT: i32 = 32;
+    /// The function returns true when Enter is pressed, instead of on every edit.
+    pub const ENTER_RETURNS_TRUE: i32 = 64;
+    pub const READ_ONLY: i32 = 512;
+}
+
+/// Flags for [`begin_tab_item`] (ImGuiTabItemFlags).
+pub mod tab_flags {
+    /// Shows a dot on the tab: its document has unsaved changes.
+    pub const UNSAVED_DOCUMENT: i32 = 1;
+    /// Makes this tab the selected one (this frame).
+    pub const SET_SELECTED: i32 = 2;
+}
+
+/// Text that [`input_text`] and [`input_text_multiline`] edit in place.
+///
+/// It keeps 64 KiB of spare room past the text, because ImGui writes into the buffer as the player types: one
+/// paste can add up to that much.
+#[derive(Clone, Default)]
+pub struct TextBuffer(Vec<u8>);
+
+impl TextBuffer {
+    const SPARE: usize = 64 * 1024;
+
+    pub fn new(text: &str) -> TextBuffer {
+        let mut b = TextBuffer::default();
+        b.set(text);
+        b
+    }
+
+    pub fn set(&mut self, text: &str) {
+        self.0.clear();
+        self.0.extend_from_slice(text.replace('\0', "").as_bytes());
+        self.0.push(0);
+    }
+
+    pub fn as_str(&self) -> &str {
+        let bytes = &self.0[..self.0.iter().position(|&b| b == 0).unwrap_or(self.0.len())];
+        std::str::from_utf8(bytes).unwrap_or_else(|e| std::str::from_utf8(&bytes[..e.valid_up_to()]).unwrap())
+    }
+
+    /// The buffer for ImGui, with room to grow.
+    fn room(&mut self) -> (*mut u8, usize) {
+        let want = self.as_str().len() + Self::SPARE;
+        if self.0.len() < want {
+            self.0.resize(want, 0);
+        }
+        (self.0.as_mut_ptr(), self.0.len())
+    }
+}
+
+/// A one-line text field. Returns true when the text was edited (or, with
+/// [`text_flags::ENTER_RETURNS_TRUE`], when Enter was pressed).
+pub fn input_text(label: &str, text: &mut TextBuffer, flags: i32) -> bool {
+    let (p, n) = text.room();
+    unsafe { (fns().input_text)(c(label).as_ptr(), p, n, flags, std::ptr::null(), std::ptr::null_mut()) }
+}
+
+/// A multi-line text box, `width` x `height` pixels: 0 is the default size, and a negative value fills the
+/// window except that many pixels (so `-f32::MIN_POSITIVE` fills it all). Returns true when the text was edited.
+pub fn input_text_multiline(label: &str, text: &mut TextBuffer, width: f32, height: f32, flags: i32) -> bool {
+    let (p, n) = text.room();
+    let size = ImVec2 { x: width, y: height };
+    unsafe { (fns().input_text_multiline)(c(label).as_ptr(), p, n, &size, flags, std::ptr::null(), std::ptr::null_mut()) }
+}
+
+/// Tabs. Only call [`end_tab_bar`] when this returns true.
+pub fn begin_tab_bar(id: &str) -> bool {
+    unsafe { (fns().begin_tab_bar)(c(id).as_ptr(), 0) }
+}
+
+pub fn end_tab_bar() {
+    unsafe { (fns().end_tab_bar)() }
+}
+
+/// A tab; true while it is the selected one. Only call [`end_tab_item`] when this returns true. With `open`, the
+/// tab has a close button that sets it to false. Labels must be unique in the tab bar: add `##id` to make them so.
+pub fn begin_tab_item(label: &str, open: Option<&mut bool>, flags: i32) -> bool {
+    let open = open.map_or(std::ptr::null_mut(), |o| o as *mut bool);
+    unsafe { (fns().begin_tab_item)(c(label).as_ptr(), open, flags) }
+}
+
+pub fn end_tab_item() {
+    unsafe { (fns().end_tab_item)() }
+}
+
+/// True on the frame Ctrl (Cmd on a Mac keyboard layout ImGui maps to Ctrl) and the letter `key` went down. Unlike
+/// [`crate::key_pressed`], this also sees keys typed into a text field, so it works for shortcuts like Ctrl+S.
+pub fn ctrl_shortcut(key: char) -> bool {
+    const KEY_A: i32 = 546; // ImGuiKey_A; the letters follow in order
+    const MOD_CTRL: i32 = 1 << 12; // ImGuiMod_Ctrl
+    let key = key.to_ascii_uppercase();
+    if !key.is_ascii_uppercase() {
+        return false;
+    }
+    unsafe { (fns().is_key_down)(MOD_CTRL) && (fns().is_key_pressed)(KEY_A + (key as i32 - 'A' as i32), false) }
+}
+
+/// Puts the keyboard focus on a widget: `0` the next one, `-1` the one just drawn (e.g. to keep typing in a
+/// console line after Enter).
+pub fn set_keyboard_focus_here(offset: i32) {
+    unsafe { (fns().set_keyboard_focus_here)(offset) }
 }

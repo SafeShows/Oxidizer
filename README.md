@@ -104,6 +104,8 @@ Also in `oxidizer_api`:
 - `hook(type, method, postfix, fn)` patches a game method; inside the hook, `hook_result()` / `set_hook_result(&v)` read and replace its return value (from a prefix, return `false` as well to skip the original).
 - `key_pressed("F5")` is true on the frame a key was pressed, `key_down("F5")` while it's held. Names are the game's key names (`"K"`, `"F5"`, `"Space"`, `"LeftShift"`, ...). Keys typed into text fields or the console, or eaten by a dialog, don't count.
 - `config_path("my_mod")` is where to keep your settings: `<documents>/oxidizer/my_mod.toml`, outside the mod folder so updating the mod doesn't lose them.
+- `log_lines(from)` / `log_next()` read Oxidizer's log, `mod_statuses()` says which mods run and why others don't, and `rhai_eval(code)` runs Rhai against the live game with the access Rhai mods have (variables persist between calls). `mods_dir()` is the game's mods folder. (Oxidizer 0.7.0 or later.)
+- `imgui` has text fields (`input_text`, `input_text_multiline` with a `TextBuffer`), tabs (`begin_tab_bar`, `begin_tab_item`) and `ctrl_shortcut('s')`, which also sees keys typed into a text field.
 
 #### Typed bindings
 

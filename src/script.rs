@@ -41,10 +41,33 @@ struct Script {
 /// call a game method that another script hooks while it runs.
 struct Scripts {
     engine: Engine,
-    mods: Vec<Mutex<Script>>,
+    /// Only grows (a script keeps its index, which `CURRENT` and hooks use). Read through `mods()`.
+    mods: Mutex<Vec<Arc<Mutex<Script>>>>,
+    /// Their names, readable without waiting for a busy script.
+    names: Mutex<Vec<String>>,
+    /// Variables of the console (`eval`), kept between calls.
+    console: Mutex<Scope<'static>>,
 }
 
 static SCRIPTS: OnceLock<Scripts> = OnceLock::new();
+
+/// The script engine, built with typed game access on first use (when the first script mod loads, or the console runs).
+fn scripts() -> &'static Scripts {
+    SCRIPTS.get_or_init(|| {
+        let started = Instant::now();
+        let mut engine = engine();
+        let count = crate::ksa_rhai::register(&mut engine);
+        log(&format!("typed game access for Rhai: {count} functions in {} ms", started.elapsed().as_millis()));
+        let docs = oxidizer_api::config_path("x").parent().map(Path::to_path_buf).unwrap_or_default();
+        crate::ksa_rhai::write_definitions(&engine, &docs.join("definitions"));
+        Scripts { engine, mods: Mutex::new(vec![]), names: Mutex::new(vec![]), console: Mutex::new(Scope::new()) }
+    })
+}
+
+/// The loaded scripts, copied out so no list lock is held while they run (they may add scripts or call hooks).
+fn mods() -> Vec<Arc<Mutex<Script>>> {
+    SCRIPTS.get().map(|s| s.mods.lock().unwrap_or_else(|e| e.into_inner()).clone()).unwrap_or_default()
+}
 
 thread_local! {
     /// The script running on this thread, so `patch()` and `config_get()` know who calls them.
@@ -89,45 +112,70 @@ fn report(name: &str, problem: String) {
 
 pub fn load(list: Vec<(String, PathBuf)>) {
     if list.is_empty() {
-        return;
+        return; // the engine is built when a script mod or the console first needs it
     }
-    let started = Instant::now();
-    let mut engine = engine();
-    let count = crate::ksa_rhai::register(&mut engine);
-    log(&format!("typed game access for Rhai: {count} functions in {} ms", started.elapsed().as_millis()));
-    let docs = oxidizer_api::config_path("x").parent().map(Path::to_path_buf).unwrap_or_default();
-    crate::ksa_rhai::write_definitions(&engine, &docs.join("definitions"));
-    let mods: Vec<Script> = list
-        .into_iter()
-        .map(|(name, path)| {
-            let modified = modified(&path);
-            // A script that doesn't compile stays in the list, so fixing the file starts it.
-            let (ast, scope, dead) = match compile(&engine, &path) {
-                Ok((ast, scope)) => {
-                    log(&format!("loaded script mod {name}"));
-                    (ast, scope, false)
-                }
-                Err(e) => {
-                    report(&name, e);
-                    (AST::empty(), Scope::new(), true)
-                }
-            };
-            Script { name, path, modified, ast, scope, this: Map::new().into(), dead, started: false }
-        })
-        .collect();
-    *CONFIGS.lock().unwrap() = mods
-        .iter()
-        .map(|m: &Script| {
-            let path = oxidizer_api::config_path(&m.name);
-            let table = fs::read_to_string(&path).ok().and_then(|t| t.parse().ok()).unwrap_or_default();
-            Config { path, table, dirty: false }
-        })
-        .collect();
-    let s = SCRIPTS.get_or_init(|| Scripts { engine, mods: mods.into_iter().map(Mutex::new).collect() });
-    for (i, m) in s.mods.iter().enumerate() {
-        if let Some(mut m) = lock(m) {
+    let s = scripts();
+    let added: Vec<usize> = list.into_iter().map(|(name, path)| add(s, name, path)).collect();
+    let mods = mods();
+    for i in added {
+        if let Some(mut m) = lock(&mods[i]) {
             start(&s.engine, i, &mut m);
         }
+    }
+}
+
+/// Compiles a script mod and adds it (with its settings) to the list; returns its index. A script that doesn't
+/// compile stays in the list, so fixing the file starts it.
+fn add(s: &Scripts, name: String, path: PathBuf) -> usize {
+    let modified = modified(&path);
+    let (ast, scope, dead) = match compile(&s.engine, &path) {
+        Ok((ast, scope)) => {
+            log(&format!("loaded script mod {name}"));
+            (ast, scope, false)
+        }
+        Err(e) => {
+            report(&name, e);
+            (AST::empty(), Scope::new(), true)
+        }
+    };
+    let config = oxidizer_api::config_path(&name);
+    let table = fs::read_to_string(&config).ok().and_then(|t| t.parse().ok()).unwrap_or_default();
+    // Same index in both lists.
+    CONFIGS.lock().unwrap_or_else(|e| e.into_inner()).push(Config { path: config, table, dirty: false });
+    s.names.lock().unwrap_or_else(|e| e.into_inner()).push(name.clone());
+    let mut mods = s.mods.lock().unwrap_or_else(|e| e.into_inner());
+    mods.push(Arc::new(Mutex::new(Script { name, path, modified, ast, scope, this: Map::new().into(), dead, started: false })));
+    mods.len() - 1
+}
+
+/// Starts script mods that appeared in the mods folder while the game runs (e.g. made by an in-game editor).
+fn start_new() {
+    let known = SCRIPTS.get().map(|s| s.names.lock().unwrap_or_else(|e| e.into_inner()).clone()).unwrap_or_default();
+    for (name, path) in crate::script_mods().into_iter().filter(|(n, _)| !known.contains(n)) {
+        let s = scripts();
+        log(&format!("new script mod {name}"));
+        let i = add(s, name, path);
+        if let Some(mut m) = mods().get(i).and_then(|m| lock(m)) {
+            start(&s.engine, i, &mut m);
+        }
+    }
+}
+
+/// Runs Rhai code like a console line: variables persist between calls, `print` goes to the log.
+/// Returns the value as text (empty for `()`), or the error.
+pub fn eval(code: &str) -> Result<String, String> {
+    let s = scripts();
+    let mut scope = s.console.lock().unwrap_or_else(|e| e.into_inner());
+    let outer = CURRENT.replace(usize::MAX); // no script: config_get/set and patch() find no mod
+    let result = s.engine.eval_with_scope::<Dynamic>(&mut scope, code);
+    CURRENT.set(outer);
+    match result {
+        Ok(v) if v.is_unit() => Ok(String::new()),
+        Ok(v) => Ok(match v.clone().try_cast::<RObj>() {
+            Some(o) => o.0.to_string(),
+            None => v.to_string(),
+        }),
+        Err(e) => Err(e.to_string()),
     }
 }
 
@@ -155,8 +203,9 @@ pub fn reload_changed() {
         *last = Some(Instant::now());
     }
     save_settings();
+    start_new();
     let Some(s) = SCRIPTS.get() else { return };
-    for (i, m) in s.mods.iter().enumerate() {
+    for (i, m) in mods().iter().enumerate() {
         let Some(mut m) = lock(m) else { continue };
         let t = modified(&m.path);
         if t == m.modified {
@@ -182,7 +231,7 @@ pub fn reload_changed() {
 
 pub fn call_all(f: &str, args: impl FuncArgs + Clone) {
     let Some(s) = SCRIPTS.get() else { return };
-    for (i, m) in s.mods.iter().enumerate() {
+    for (i, m) in mods().iter().enumerate() {
         if let Some(mut m) = lock(m) {
             call(&s.engine, i, &mut m, f, args.clone());
         }
@@ -255,7 +304,8 @@ extern "C" fn hook_tramp(user: usize, inst: Handle, args: Handle) -> u8 {
     let (inst, args) = unsafe { (RObj::new(Obj::from_handle(inst)), RObj::new(Obj::from_handle(args))) };
     let (i, f) = unsafe { &*(user as *const (usize, String)) };
     let Some(s) = SCRIPTS.get() else { return 1 };
-    let Some(mut m) = lock(&s.mods[*i]) else { return 1 }; // the script is busy: see lock()
+    let Some(script) = mods().get(*i).cloned() else { return 1 }; // the console patched it: no script to call
+    let Some(mut m) = lock(&script) else { return 1 }; // the script is busy: see lock()
     call(&s.engine, *i, &mut m, f, (inst, args)).and_then(|v| v.as_bool().ok()).unwrap_or(true) as u8
 }
 

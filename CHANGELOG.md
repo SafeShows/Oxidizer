@@ -5,6 +5,15 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ## [Unreleased]
 
+### Added
+
+- Script mods that appear in the mods folder while the game runs start within a second, without a restart (for example one made by an in-game editor).
+- `oxidizer_api` 0.4.0 (API version 3): read Oxidizer's log (`log_lines`, `log_next`) and mod states (`mod_statuses`), run Rhai code against the live game (`rhai_eval`, a console whose variables persist), `mods_dir`; ImGui text fields (`input_text`, `input_text_multiline` with `TextBuffer`), tabs and `ctrl_shortcut`. Mods built with it need this Oxidizer or later; older mods keep working.
+
+### Changed
+
+- The Rhai engine is built when it is first needed, so a game without Rhai mods doesn't spend the startup time on it.
+
 ## [0.6.3] - 2026-11-08
 
 ### Changed

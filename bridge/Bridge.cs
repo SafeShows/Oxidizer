@@ -39,6 +39,7 @@ public unsafe struct Api
     public delegate* unmanaged<byte*, nuint, nuint> KsaVersion;
     public delegate* unmanaged<nint, long*, byte> AsI64;
     public delegate* unmanaged<long, nint> BoxI64;
+    // API version 3 fields follow, filled by the Rust core after Init (see oxidizer_api::Api); the bridge never touches them.
 }
 
 // Must match `Host` in src/main.rs.
