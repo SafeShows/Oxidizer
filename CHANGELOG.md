@@ -5,6 +5,8 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ## [Unreleased]
 
+## [0.9.0] - 2026-11-08
+
 ### Added
 
 - Events and services between mods, Rust and Rhai alike. Events: `publish`, `publish_retained` (kept as the topic's current value for later subscribers) and `subscribe`, delivered at the start of the next frame. Services: `provide` and `call_service` / `call`, which return a value. Names start with the owning mod's id, and only that mod publishes on or provides them. Values are JSON: maps in Rhai, serde types in Rust (`Event` and `Service` traits). **Mods > Oxidizer** has an **Event bus** section. Examples: `bus_rust` and `bus_rhai`.
@@ -151,7 +153,8 @@ First release.
 - When a method has several overloads, `call` and patching use the first one with a matching number of arguments.
 - Hooks can't read or change a patched method's return value.
 
-[Unreleased]: https://github.com/SafeShows/Oxidizer/compare/v0.8.0...HEAD
+[Unreleased]: https://github.com/SafeShows/Oxidizer/compare/v0.9.0...HEAD
+[0.9.0]: https://github.com/SafeShows/Oxidizer/compare/v0.8.0...v0.9.0
 [0.8.0]: https://github.com/SafeShows/Oxidizer/compare/v0.7.0...v0.8.0
 [0.7.0]: https://github.com/SafeShows/Oxidizer/compare/v0.6.3...v0.7.0
 [0.6.3]: https://github.com/SafeShows/Oxidizer/compare/v0.6.2...v0.6.3
