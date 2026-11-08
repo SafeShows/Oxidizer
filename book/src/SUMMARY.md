@@ -27,6 +27,12 @@
 - [Hooks](rust/hooks.md)
 - [Keys, settings and more](rust/more.md)
 
+# Reference
+
+- [Rhai API](reference/rhai.md)
+- [Rust API](reference/rust.md)
+- [Files and command line](reference/files.md)
+
 # Sharing your mod
 
 - [Releases](publishing/releases.md)
