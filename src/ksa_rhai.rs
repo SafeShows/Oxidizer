@@ -294,9 +294,11 @@ pub fn register(engine: &mut Engine) -> usize {
     count
 }
 
-/// Writes definition files for editors, once per game build (`<dir>/version.txt` remembers which).
+/// Writes definition files for editors, once per game build and Oxidizer version (`<dir>/version.txt` remembers which).
 pub fn write_definitions(engine: &Engine, dir: &Path) {
-    let version = oxidizer_api::read_string(|b, c| (api().ksa_version)(b, c));
+    // Rewritten for a new game build or a new Oxidizer (which may describe the game differently).
+    let ksa = oxidizer_api::read_string(|b, c| (api().ksa_version)(b, c));
+    let version = format!("{ksa} oxidizer {}", env!("CARGO_PKG_VERSION"));
     let marker = dir.join("version.txt");
     if std::fs::read_to_string(&marker).is_ok_and(|v| v == version) {
         return;

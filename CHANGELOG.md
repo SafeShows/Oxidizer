@@ -5,9 +5,12 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ## [Unreleased]
 
+## [0.6.3] - 2026-11-08
+
 ### Changed
 
 - Rhai editor definitions now carry types for instance members too (`fn get_surface_speed(obj: Obj) -> float`), with the game types that have each member in its description. A member that game types define differently keeps `?`. Types are named as scripts see them: `int`, `float`, `bool`, `String`, or the game type.
+- The definitions are rewritten when Oxidizer updates too, not only when the game does.
 
 ## [0.6.2] - 2026-11-08
 
@@ -123,7 +126,8 @@ First release.
 - When a method has several overloads, `call` and patching use the first one with a matching number of arguments.
 - Hooks can't read or change a patched method's return value.
 
-[Unreleased]: https://github.com/SafeShows/Oxidizer/compare/v0.6.2...HEAD
+[Unreleased]: https://github.com/SafeShows/Oxidizer/compare/v0.6.3...HEAD
+[0.6.3]: https://github.com/SafeShows/Oxidizer/compare/v0.6.2...v0.6.3
 [0.6.2]: https://github.com/SafeShows/Oxidizer/compare/v0.6.1...v0.6.2
 [0.6.1]: https://github.com/SafeShows/Oxidizer/compare/v0.6.0...v0.6.1
 [0.6.0]: https://github.com/SafeShows/Oxidizer/compare/v0.5.1...v0.6.0
