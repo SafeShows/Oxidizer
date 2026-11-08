@@ -39,8 +39,15 @@ struct RustMod {
 static API: OnceLock<&'static Api> = OnceLock::new();
 static COPIES: OnceLock<PathBuf> = OnceLock::new();
 static MODS: Mutex<Vec<RustMod>> = Mutex::new(Vec::new());
-/// Hooks the Rust mods added: (mod, callback, user), so a reload can take a mod's out.
-static HOOKS: Mutex<Vec<(&'static str, HookFn, usize)>> = Mutex::new(Vec::new());
+/// A Rust mod's hook, as the bridge calls it: through `timed_hook`, which times it for the Performance view.
+struct Hook {
+    id: &'static str,
+    cb: HookFn,
+    user: usize,
+}
+
+/// The hooks Rust mods added (leaked `Hook`s, as the bridge's user values), so a reload can take a mod's out.
+static HOOKS: Mutex<Vec<usize>> = Mutex::new(Vec::new());
 static NEXT_COPY: AtomicU64 = AtomicU64::new(1);
 const CHECK_EVERY: Duration = Duration::from_secs(1);
 
@@ -53,10 +60,10 @@ fn lock<T>(m: &Mutex<T>) -> MutexGuard<'_, T> {
     m.lock().unwrap_or_else(|e| e.into_inner())
 }
 
-/// Calls into a mod, marking it as the one running.
+/// Calls into a mod, marking it as the one running, and timing it.
 fn run(id: &'static str, f: impl FnOnce()) {
     let outer = RUNNING.replace(Some(id));
-    f();
+    crate::perf::time(id, f);
     RUNNING.set(outer);
 }
 
@@ -119,13 +126,23 @@ fn begin(m: &RustMod) {
 }
 
 extern "C" fn api_patch(ty: *const u8, tn: usize, me: *const u8, mn: usize, post: u8, cb: HookFn, user: usize) -> u8 {
-    let ok = (API.get().expect("not set up").patch)(ty, tn, me, mn, post, cb, user);
-    if ok != 0
-        && let Some(id) = RUNNING.get()
-    {
-        lock(&HOOKS).push((id, cb, user));
+    // ponytail: a hook added outside the mod's callbacks (from a thread, say) is timed as "unknown" and stays
+    // through a reload, running the old copy's code.
+    let hook = Box::into_raw(Box::new(Hook { id: RUNNING.get().unwrap_or("unknown"), cb, user })) as usize;
+    let ok = (API.get().expect("not set up").patch)(ty, tn, me, mn, post, timed_hook, hook);
+    if ok == 0 {
+        drop(unsafe { Box::from_raw(hook as *mut Hook) });
+    } else if RUNNING.get().is_some() {
+        lock(&HOOKS).push(hook);
     }
     ok
+}
+
+extern "C" fn timed_hook(hook: usize, instance: oxidizer_api::Handle, args: oxidizer_api::Handle) -> u8 {
+    let h = unsafe { &*(hook as *const Hook) };
+    let mut r = 1;
+    run(h.id, || r = (h.cb)(h.user, instance, args));
+    r
 }
 
 /// Loads and starts a mod (in load order). The error says why it didn't.
@@ -217,14 +234,14 @@ fn reload(old: RustMod) {
 
 /// Takes out what a mod added: its hooks, event subscriptions and services.
 fn forget(id: &str) {
-    let hooks: Vec<(HookFn, usize)> = {
+    let hooks: Vec<usize> = {
         let mut all = lock(&HOOKS);
-        let mine = all.iter().filter(|h| h.0 == id).map(|h| (h.1, h.2)).collect();
-        all.retain(|h| h.0 != id);
+        let (mine, rest) = all.iter().partition(|&&h| unsafe { &*(h as *const Hook) }.id == id);
+        *all = rest;
         mine
     };
-    for (cb, user) in hooks {
-        (internal().unhook)(cb as usize, user);
+    for hook in hooks {
+        (internal().unhook)(timed_hook as *const () as usize, hook); // the Hook stays allocated: the bridge may be running it
     }
     bus::forget(id);
 }

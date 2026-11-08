@@ -161,10 +161,10 @@ pub fn deliver() {
     for (topic, json, only) in batch {
         for s in subs.iter().filter(|s| s.topic == topic && only.is_none_or(|o| o == s.id)) {
             match &s.target {
-                Target::Rust { cb, user, .. } => {
+                Target::Rust { cb, user, owner } => {
                     // A callback may have unsubscribed another (and freed its data) during this delivery.
                     if bus().subs.iter().any(|x| x.id == s.id) {
-                        cb(*user, json.as_ptr(), json.len());
+                        crate::perf::time(owner, || cb(*user, json.as_ptr(), json.len()));
                     }
                 }
                 Target::Rhai { script, function } => script::deliver_event(script, function, &json),
@@ -188,11 +188,11 @@ pub fn provide(caller: &str, name: &str, provider: Provider) -> Result<(), Strin
 /// Calls a service; the JSON result, or the error.
 pub fn call(name: &str, args: &str) -> Result<String, String> {
     check_json("the arguments", args)?;
-    let provider = bus().services.get(name).map(|(_, p)| p.clone()).ok_or_else(|| format!("no mod provides {name}"))?;
+    let (owner, provider) = bus().services.get(name).cloned().ok_or_else(|| format!("no mod provides {name}"))?;
     match provider {
         Provider::Rust { cb, user } => {
             REPLY.with_borrow_mut(|r| *r = None);
-            let ok = cb(user, args.as_ptr(), args.len());
+            let ok = crate::perf::time(&owner, || cb(user, args.as_ptr(), args.len()));
             let reply = REPLY.with_borrow_mut(|r| r.take()).unwrap_or_default();
             if ok == 0 {
                 return Err(format!("{name}: {reply}"));

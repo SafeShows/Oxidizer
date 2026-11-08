@@ -10,6 +10,7 @@ const LOG_LINES: usize = 300;
 const RED: [f32; 4] = [1.0, 0.45, 0.4, 1.0];
 const GREEN: [f32; 4] = [0.5, 0.9, 0.5, 1.0];
 const GRAY: [f32; 4] = [0.6, 0.6, 0.6, 1.0];
+const AMBER: [f32; 4] = [1.0, 0.75, 0.3, 1.0];
 
 static SHOW: AtomicBool = AtomicBool::new(false);
 /// The last LOG_LINES lines, and the number the next line gets (lines are numbered from 0).
@@ -91,11 +92,13 @@ pub fn draw() {
             imgui::text(&format!("{} ({})", m.id, m.kind));
             imgui::same_line();
             match &m.problem {
+                None if m.kind == "Rhai" && crate::debug::paused(&m.id) => imgui::text_colored(AMBER, "paused at a breakpoint"),
                 None => imgui::text_colored(GREEN, "running"),
                 Some(p) => imgui::text_colored(RED, p),
             }
         }
         imgui::separator();
+        draw_perf();
         draw_bus();
         imgui::text("Log");
         imgui::begin_child("oxidizer_log", 0.0);
@@ -112,6 +115,25 @@ pub fn draw() {
 }
 
 /// What mods say to each other: topics with their subscribers and retained values, recent events, services.
+/// Milliseconds per frame for each mod (average, and the worst frame in the last second).
+fn draw_perf() {
+    if !imgui::collapsing_header("Performance") {
+        return;
+    }
+    let (frame, rows) = crate::perf::snapshot();
+    imgui::text_colored(GRAY, &format!("frame {frame:.1} ms ({:.0} fps); per mod: average, worst in the last second", 1000.0 / frame.max(0.001)));
+    for (name, avg, peak) in rows {
+        // Of a 60 fps frame (16.7 ms): over 1 ms is worth a look, over 4 ms costs frames.
+        let color = if avg > 4.0 { RED } else if avg > 1.0 { AMBER } else { GREEN };
+        imgui::text_colored(color, &format!("{avg:6.2} ms"));
+        imgui::same_line();
+        imgui::text_colored(GRAY, &format!("{peak:6.2} ms"));
+        imgui::same_line();
+        imgui::text(&name);
+    }
+    imgui::separator();
+}
+
 fn draw_bus() {
     if !imgui::collapsing_header("Event bus") {
         return;

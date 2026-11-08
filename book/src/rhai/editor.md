@@ -2,7 +2,15 @@
 
 ## In the game: Rhai Studio
 
-[Rhai Studio](https://github.com/SafeShows/oxidizer-rhai-studio) is an editor inside the game: syntax colors, Ctrl+S saves and reloads, errors above the editor, a new-mod wizard, and a console that runs Rhai against the live game. Install it like any mod and press F9.
+[Rhai Studio](https://github.com/SafeShows/oxidizer-rhai-studio) is an editor inside the game: syntax colors, Ctrl+S saves and reloads, errors above the editor, a new-mod wizard, and a console that runs Rhai against the live game. Install it like any mod and press F9. It also has autocomplete, an API explorer, and breakpoints (below).
+
+### Breakpoints
+
+Click left of a line number in Rhai Studio to set a breakpoint (Oxidizer 0.11 and Rhai Studio 1.2 or later). When the mod reaches that line, Oxidizer takes a snapshot: the function's variables, `this`, and the call stack. The **DEBUG** panel shows them, and the line is highlighted.
+
+The game doesn't stop, only the mod: the call that hit the breakpoint finishes, and then Oxidizer stops calling the mod (its `frame`, windows, menu entries, events and hooks) until you press **CONTINUE**. A breakpoint in `frame` stops again on the next frame, so CONTINUE steps one frame at a time. Click the dot again to remove the breakpoint; a mod paused there runs on.
+
+Other tools can do the same through the console: `debug_breakpoints("my_mod/main.rhai", [23])`, `debug_state()` (JSON) and `debug_continue("my_mod")`.
 
 ## On your desktop: definitions for autocomplete
 

@@ -6,8 +6,10 @@
 //! Either way the bridge's `Init` is handed in, the Api table is filled, and the mods are loaded.
 
 mod bus;
+mod debug;
 mod ksa_rhai;
 mod mods;
+mod perf;
 mod rust_mods;
 mod script;
 mod ui;
@@ -110,8 +112,11 @@ extern "C" fn on_loaded() {
 }
 
 extern "C" fn on_frame(t: f64, dt: f64) {
-    script::reload_changed();
-    rust_mods::reload_changed();
+    perf::end_frame(dt);
+    perf::time("(Oxidizer)", || {
+        script::reload_changed();
+        rust_mods::reload_changed();
+    });
     bus::deliver(); // events published since the last frame, before mods' frame()
     rust_mods::call_frame(t, dt);
     script::call_all("frame", (t, dt));
@@ -120,7 +125,7 @@ extern "C" fn on_frame(t: f64, dt: f64) {
 extern "C" fn on_gui(dt: f64) {
     rust_mods::call_gui(dt);
     script::call_all("gui", (dt,));
-    ui::draw();
+    perf::time("(Oxidizer)", ui::draw);
 }
 
 /// Runs inside the game's menu bar (after its own menus).

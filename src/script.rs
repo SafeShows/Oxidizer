@@ -128,10 +128,12 @@ fn modified(path: &Path) -> Option<SystemTime> {
     fs::metadata(path).and_then(|m| m.modified()).ok()
 }
 
-/// Compile the file and run its top-level code.
-fn compile(engine: &Engine, path: &Path) -> Result<(AST, Scope<'static>), String> {
+/// Compile the file and run its top-level code. Its source name is "mod/file.rhai" (breakpoints use it).
+fn compile(engine: &Engine, path: &Path, name: &str) -> Result<(AST, Scope<'static>), String> {
     let mut scope = Scope::new();
-    let ast = engine.compile_file(path.into()).map_err(|e| e.to_string())?;
+    let mut ast = engine.compile_file(path.into()).map_err(|e| e.to_string())?;
+    let file = path.file_name().map(|f| f.to_string_lossy().into_owned()).unwrap_or_default();
+    ast.set_source(format!("{name}/{file}"));
     engine.run_ast_with_scope(&mut scope, &ast).map_err(|e| e.to_string())?;
     Ok((ast, scope))
 }
@@ -156,7 +158,7 @@ pub fn start_mod(name: &str, path: &Path) -> bool {
 /// compile stays in the list, so fixing the file starts it.
 fn add(s: &Scripts, name: String, path: PathBuf) -> usize {
     let modified = modified(&path);
-    let (ast, scope, dead) = match compile(&s.engine, &path) {
+    let (ast, scope, dead) = match compile(&s.engine, &path, &name) {
         Ok((ast, scope)) => {
             log(&format!("loaded script mod {name}"));
             (ast, scope, false)
@@ -240,10 +242,13 @@ pub fn call_service(script: &str, function: &str, args: &str) -> Result<String, 
     if m.dead {
         return Err(format!("{script} has stopped after an error"));
     }
+    if crate::debug::paused(script) {
+        return Err(format!("{script} is paused at a breakpoint"));
+    }
     let outer = CURRENT.replace(i);
     let m = &mut *m;
     let opts = CallFnOptions::new().eval_ast(false).bind_this_ptr(&mut m.this);
-    let result = s.engine.call_fn_with_options::<Dynamic>(opts, &mut m.scope, &m.ast, function, (json_to_dyn(args),));
+    let result = crate::perf::time(&m.name, || s.engine.call_fn_with_options::<Dynamic>(opts, &mut m.scope, &m.ast, function, (json_to_dyn(args),)));
     CURRENT.set(outer);
     dyn_to_json(&result.map_err(|e| e.to_string())?)
 }
@@ -303,7 +308,7 @@ pub fn reload_changed() {
             continue;
         }
         m.modified = t;
-        match compile(&s.engine, &m.path) {
+        match compile(&s.engine, &m.path, &m.name) {
             Ok((ast, scope)) => {
                 (m.ast, m.scope, m.dead) = (ast, scope, false);
                 log(&format!("reloaded script mod {}", m.name));
@@ -333,9 +338,12 @@ fn call(engine: &Engine, i: usize, m: &mut Script, f: &str, args: impl FuncArgs)
     if m.dead || !m.ast.iter_functions().any(|x| x.name == f) {
         return None;
     }
+    if !matches!(f, "init" | "reload" | "unload") && crate::debug::paused(&m.name) {
+        return None; // stopped at a breakpoint: frames, windows, events and hooks wait for "continue"
+    }
     let outer = CURRENT.replace(i); // calls nest when a script calls a method another script hooks
     let opts = CallFnOptions::new().eval_ast(false).bind_this_ptr(&mut m.this);
-    let result = engine.call_fn_with_options::<Dynamic>(opts, &mut m.scope, &m.ast, f, args);
+    let result = crate::perf::time(&m.name, || engine.call_fn_with_options::<Dynamic>(opts, &mut m.scope, &m.ast, f, args));
     CURRENT.set(outer);
     match result {
         Ok(v) => Some(v),
@@ -523,6 +531,14 @@ fn engine() -> Engine {
     });
 
     // keys, by the game's key names ("F5", "K", "Space"); pressed = this frame only
+    // breakpoints (Rhai Studio uses these; see debug.rs)
+    e.def("debug_breakpoints", &["source: string", "lines: array", "()"], "Sets the breakpoint lines of a script, named \"mod/file.rhai\"; an empty array clears them. A mod that reaches one is paused until debug_continue.", |source: &str, lines: Array| {
+        crate::debug::set_breakpoints(source, lines.iter().filter_map(|l| l.as_int().ok()).filter(|&l| l > 0).map(|l| l as usize).collect());
+    })
+    .def("debug_continue", &["mod_id: string", "()"], "Lets a mod paused at a breakpoint run again.", |m: &str| crate::debug::resume(m))
+    .def("debug_state", &["string"], "Breakpoints, and what each one saw when last hit (variables, this, call stack), as JSON.", crate::debug::state);
+    crate::debug::install(&mut e);
+
     e.def("key_pressed", &["key: string", "bool"], "True on the frame the key was pressed. Names are the game's: \"F5\", \"K\", \"Space\", \"LeftShift\".", |k: &str| oxidizer_api::key_pressed(k))
         .def("key_down", &["key: string", "bool"], "True while the key is held.", |k: &str| oxidizer_api::key_down(k));
 

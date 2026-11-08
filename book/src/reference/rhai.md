@@ -125,6 +125,16 @@ Names start with the owning mod's id; only that mod publishes on or provides the
 
 Values are numbers, strings, bools, arrays and object maps (they cross as JSON). `subscribe` and `provide` work in a script, not in the console.
 
+## Breakpoints
+
+What [Rhai Studio](../rhai/editor.md#breakpoints) uses; a source is `"mod/file.rhai"`. 0.11+.
+
+| Function | Returns | Does |
+|---|---|---|
+| `debug_breakpoints(source: String, lines: Array)` | `()` | Sets a script's breakpoint lines (empty clears them). A mod that reaches one is paused until `debug_continue`. |
+| `debug_state()` | `String` | The breakpoints, and what each saw when last hit (variables, `this`, call stack, whether the mod is paused), as JSON. |
+| `debug_continue(mod_id: String)` | `()` | Lets a paused mod run again. |
+
 ## Output
 
 | Function | Does |

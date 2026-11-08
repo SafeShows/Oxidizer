@@ -10,7 +10,7 @@ KSA is a .NET 10 game, so Oxidizer has a small C# bridge (with Harmony) that hoo
 - **As a StarMap mod** (`Oxidizer.StarMap`): StarMap starts the game and loads the bridge like any C# mod, and the bridge loads the core. Use this if you use StarMap or other C# mods.
 - **Standalone** (`oxidizer`): Oxidizer starts the game's .NET runtime itself (`hostfxr.dll` / `libhostfxr.so` from the game folder), loads the bridge, then runs the game's `Main`. No StarMap needed.
 
-In game, **Mods > Oxidizer** in the menu bar opens a window that lists the loaded mods, their errors and the log.
+In game, **Mods > Oxidizer** in the menu bar opens a window that lists the loaded mods, their errors and the log, what each mod costs per frame (**Performance**), and the event bus.
 
 ## Install
 

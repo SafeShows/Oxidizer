@@ -5,6 +5,17 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ## [Unreleased]
 
+## [0.11.0] - 2026-11-08
+
+### Added
+
+- **Mods > Oxidizer > Performance:** what each mod costs per frame, on average and in the worst frame of the last second: its callbacks, hooks, events and services, Rust and Rhai alike. Time is counted once: when a mod calls a game method another mod hooks, the hook's time is the other mod's.
+- Breakpoints for Rhai mods: `debug_breakpoints(source, lines)`, `debug_state()` and `debug_continue(mod)`, which Rhai Studio 1.2 uses. A mod that reaches a breakpoint leaves a snapshot of its variables, `this` and call stack, finishes that call, and pauses (no frame, windows, menu entries, events or hooks) until it is continued or the breakpoint is removed. The game keeps running.
+
+### Changed
+
+- Rhai scripts are named `mod/file.rhai` (their source), which some error messages now include.
+
 ## [0.10.0] - 2026-11-08
 
 ### Added
@@ -169,7 +180,8 @@ First release.
 - When a method has several overloads, `call` and patching use the first one with a matching number of arguments.
 - Hooks can't read or change a patched method's return value.
 
-[Unreleased]: https://github.com/SafeShows/Oxidizer/compare/v0.10.0...HEAD
+[Unreleased]: https://github.com/SafeShows/Oxidizer/compare/v0.11.0...HEAD
+[0.11.0]: https://github.com/SafeShows/Oxidizer/compare/v0.10.0...v0.11.0
 [0.10.0]: https://github.com/SafeShows/Oxidizer/compare/v0.9.1...v0.10.0
 [0.9.1]: https://github.com/SafeShows/Oxidizer/compare/v0.9.0...v0.9.1
 [0.9.0]: https://github.com/SafeShows/Oxidizer/compare/v0.8.0...v0.9.0
