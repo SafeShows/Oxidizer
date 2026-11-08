@@ -32,8 +32,11 @@ public static unsafe class Describer
     ///        static member: m method, c constructor, p property (token = getter, setter = setter token or 0),
     ///        f field (setter = 1 if writable); params "name:Type,..." and returns a type name, for editors
     ///   E  type  name  value                        enum value
-    ///   I  kind  name  arity  writable              instance member name (m, p or f), of any KSA or game library type
+    ///   I  kind  name  arity  writable  params  returns  owners
+    ///        instance member name (m, p or f), of any KSA or game library type; params and returns as above when
+    ///        every type with this member agrees (else empty), owners the short names of those types ("+N" for more)
     /// Types are full names with '+' for nested types. Members whose types can't cross the bridge are left out.
+    /// Parameter and return types are named as a Rhai script sees them: int, float, bool, String, () or the type.
     [UnmanagedCallersOnly]
     static nuint Describe(byte* buf, nuint cap)
     {
@@ -80,16 +83,46 @@ public static unsafe class Describer
         !m.IsGenericMethodDefinition && !m.Name.Contains('<') && m.GetParameters().All(p => Passable(p.ParameterType))
         && (m is not MethodInfo mi || mi.ReturnType == typeof(void) || Passable(mi.ReturnType));
 
-    static string Params(MethodBase m) => string.Join(",", m.GetParameters().Select(p => $"{p.Name}:{p.ParameterType.Name}"));
+    /// A type as a Rhai script sees it (numbers, bools and strings arrive as Rhai values, enums as integers).
+    static string RhaiType(Type t) => t switch
+    {
+        _ when t == typeof(void) => "()",
+        _ when t == typeof(bool) => "bool",
+        _ when t == typeof(string) => "String",
+        _ when t == typeof(object) => "?",
+        _ when t.IsEnum || t == typeof(char) || (t.IsPrimitive && t != typeof(float) && t != typeof(double) && t != typeof(nint) && t != typeof(nuint)) => "int",
+        _ when t == typeof(float) || t == typeof(double) || t == typeof(decimal) => "float",
+        _ => t.Name,
+    };
+
+    static string Params(MethodBase m) => string.Join(",", m.GetParameters().Select(p => $"{p.Name}:{RhaiType(p.ParameterType)}"));
+
+    /// What all types with one instance member name say about it.
+    sealed class Member
+    {
+        public bool Writable;
+        public readonly List<string> Owners = new();
+        public readonly HashSet<string> Params = new(), ParamTypes = new(), Returns = new();
+    }
 
     static string Build()
     {
         var ksa = Type.GetType("KSA.Program, KSA", true)!.Assembly;
         var sb = new StringBuilder();
-        var instance = new Dictionary<(char kind, string name, int arity), bool>();
+        var instance = new Dictionary<(char kind, string name, int arity), Member>();
 
-        void AddInstance(char kind, string name, int arity, bool writable) =>
-            instance[(kind, name, arity)] = writable || instance.GetValueOrDefault((kind, name, arity));
+        void AddInstance(Type owner, char kind, string name, int arity, bool writable, MethodInfo? m, Type? returns)
+        {
+            if (!instance.TryGetValue((kind, name, arity), out var e)) instance[(kind, name, arity)] = e = new Member();
+            e.Writable |= writable;
+            if (!e.Owners.Contains(owner.Name)) e.Owners.Add(owner.Name);
+            if (m != null)
+            {
+                e.Params.Add(Params(m));
+                e.ParamTypes.Add(string.Join(",", m.GetParameters().Select((p, i) => $"arg{i + 1}:{RhaiType(p.ParameterType)}")));
+            }
+            e.Returns.Add(RhaiType(returns ?? typeof(void)));
+        }
 
         foreach (var t in TypesOf(ksa).Where(Usable))
         {
@@ -102,7 +135,7 @@ public static unsafe class Describer
             }
             if (!t.IsAbstract && !t.IsValueType)
                 foreach (var c in t.GetConstructors(BindingFlags.Public | BindingFlags.Instance).Where(Callable))
-                    sb.Append($"S\t{name}\tc\tnew\t{c.GetParameters().Length}\t{c.MetadataToken}\t0\t{Params(c)}\t{t.Name}\n");
+                    sb.Append($"S\t{name}\tc\tnew\t{c.GetParameters().Length}\t{c.MetadataToken}\t0\t{Params(c)}\t{RhaiType(t)}\n");
             foreach (var p in t.GetProperties(Declared))
             {
                 if (p.GetIndexParameters().Length > 0 || !Passable(p.PropertyType)) continue;
@@ -110,21 +143,21 @@ public static unsafe class Describer
                 var set = p.SetMethod is { IsPublic: true } s ? s : null;
                 if (get?.IsStatic ?? set?.IsStatic ?? false)
                 {
-                    if (get != null) sb.Append($"S\t{name}\tp\t{p.Name}\t0\t{get.MetadataToken}\t{set?.MetadataToken ?? 0}\t\t{p.PropertyType.Name}\n");
+                    if (get != null) sb.Append($"S\t{name}\tp\t{p.Name}\t0\t{get.MetadataToken}\t{set?.MetadataToken ?? 0}\t\t{RhaiType(p.PropertyType)}\n");
                 }
-                else if (get != null) AddInstance('p', p.Name, 0, set != null);
+                else if (get != null) AddInstance(t, 'p', p.Name, 0, set != null, null, p.PropertyType);
             }
             foreach (var f in t.GetFields(Declared))
             {
                 if (f.Name.Contains('<') || !Passable(f.FieldType)) continue;
                 var writable = !f.IsInitOnly && !f.IsLiteral;
-                if (f.IsStatic) sb.Append($"S\t{name}\tf\t{f.Name}\t0\t{f.MetadataToken}\t{(writable ? 1 : 0)}\t\t{f.FieldType.Name}\n");
-                else AddInstance('f', f.Name, 0, writable);
+                if (f.IsStatic) sb.Append($"S\t{name}\tf\t{f.Name}\t0\t{f.MetadataToken}\t{(writable ? 1 : 0)}\t\t{RhaiType(f.FieldType)}\n");
+                else AddInstance(t, 'f', f.Name, 0, writable, null, f.FieldType);
             }
             foreach (var m in t.GetMethods(Declared).Where(m => !m.IsSpecialName && Callable(m)))
             {
-                if (m.IsStatic) sb.Append($"S\t{name}\tm\t{m.Name}\t{m.GetParameters().Length}\t{m.MetadataToken}\t0\t{Params(m)}\t{m.ReturnType.Name}\n");
-                else AddInstance('m', m.Name, m.GetParameters().Length, false);
+                if (m.IsStatic) sb.Append($"S\t{name}\tm\t{m.Name}\t{m.GetParameters().Length}\t{m.MetadataToken}\t0\t{Params(m)}\t{RhaiType(m.ReturnType)}\n");
+                else AddInstance(t, 'm', m.Name, m.GetParameters().Length, false, m, m.ReturnType);
             }
         }
 
@@ -140,15 +173,21 @@ public static unsafe class Describer
             {
                 foreach (var p in t.GetProperties(BindingFlags.Public | BindingFlags.Instance | BindingFlags.DeclaredOnly))
                     if (p.GetIndexParameters().Length == 0 && p.GetMethod is { IsPublic: true } && Passable(p.PropertyType))
-                        AddInstance('p', p.Name, 0, p.SetMethod is { IsPublic: true });
+                        AddInstance(t, 'p', p.Name, 0, p.SetMethod is { IsPublic: true }, null, p.PropertyType);
                 foreach (var f in t.GetFields(BindingFlags.Public | BindingFlags.Instance | BindingFlags.DeclaredOnly))
-                    if (Passable(f.FieldType)) AddInstance('f', f.Name, 0, !f.IsInitOnly);
+                    if (Passable(f.FieldType)) AddInstance(t, 'f', f.Name, 0, !f.IsInitOnly, null, f.FieldType);
                 foreach (var m in t.GetMethods(BindingFlags.Public | BindingFlags.Instance | BindingFlags.DeclaredOnly).Where(m => !m.IsSpecialName && Callable(m)))
-                    AddInstance('m', m.Name, m.GetParameters().Length, false);
+                    AddInstance(t, 'm', m.Name, m.GetParameters().Length, false, m, m.ReturnType);
             }
         }
-        foreach (var ((kind, name, arity), writable) in instance)
-            sb.Append($"I\t{kind}\t{name}\t{arity}\t{(writable ? 1 : 0)}\n");
+        foreach (var ((kind, name, arity), e) in instance)
+        {
+            // Parameter names too when all agree, else only their types, else nothing (the editor shows "?").
+            var ps = e.Params.Count == 1 ? e.Params.First() : e.ParamTypes.Count == 1 ? e.ParamTypes.First() : "";
+            var ret = e.Returns.Count == 1 ? e.Returns.First() : "";
+            var owners = string.Join(",", e.Owners.Take(8)) + (e.Owners.Count > 8 ? $",+{e.Owners.Count - 8}" : "");
+            sb.Append($"I\t{kind}\t{name}\t{arity}\t{(e.Writable ? 1 : 0)}\t{ps}\t{ret}\t{owners}\n");
+        }
         return sb.ToString();
     }
 }

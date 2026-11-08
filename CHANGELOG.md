@@ -5,6 +5,10 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ## [Unreleased]
 
+### Changed
+
+- Rhai editor definitions now carry types for instance members too (`fn get_surface_speed(obj: Obj) -> float`), with the game types that have each member in its description. A member that game types define differently keeps `?`. Types are named as scripts see them: `int`, `float`, `bool`, `String`, or the game type.
+
 ## [0.6.2] - 2026-11-08
 
 ### Fixed

@@ -4,7 +4,7 @@
 //! ```rhai
 //! let v = ksa::Program::controlled_vehicle();   // static members: functions in a module per namespace and type
 //! print(v.id);                                  // instance properties and fields
-//! v.set_enum(ksa::VehicleEngine::Ignite);       // instance methods; enum values are integer constants
+//! ksa::Universe::set_simulation_speed(2.0, false); // overloads by argument count; enums: ksa::VehicleEngine::MainIgnite
 //! ```
 //!
 //! Numbers, bools and strings come back as Rhai values, other objects as `Obj`. Static members are called by
@@ -224,18 +224,24 @@ pub fn register(engine: &mut Engine) -> usize {
                     _ => {}
                 }
             }
-            ["I", kind, name, arity, writable] => {
+            ["I", kind, name, arity, writable, params, returns, owners] => {
                 let arity: usize = arity.parse().unwrap_or(0);
                 let rname = snake(name);
                 let cs = name.to_string();
+                // Types are only known when every game type with this member agrees; "?" otherwise.
+                let ret = if returns.is_empty() { "?" } else { returns };
+                let on = match owners.split_once(",+") {
+                    Some((names, more)) => format!("on {} and {more} more", names.replace(',', ", ")),
+                    None => format!("on {}", owners.replace(',', ", ")),
+                };
                 if *kind == "m" {
                     if !methods.insert((rname.clone(), arity)) {
                         continue;
                     }
                     FuncRegistration::new(rname)
                         .in_global_namespace()
-                        .with_params_info(std::iter::once("obj: Obj".to_string()).chain(params_info("", arity, "?")))
-                        .with_comments([format!("/// the game method `{cs}`")])
+                        .with_params_info(std::iter::once("obj: Obj".to_string()).chain(params_info(params, arity, ret)))
+                        .with_comments([format!("/// the game method `{cs}` {on}")])
                         .set_into_module_raw(
                             &mut instance,
                             obj_and(arity),
@@ -252,12 +258,12 @@ pub fn register(engine: &mut Engine) -> usize {
                     }
                     let get_cs = cs.clone();
                     FuncRegistration::new_getter(&rname)
-                        .with_params_info(["obj: Obj", "?"])
-                        .with_comments([format!("/// the game property or field `{cs}`")])
+                        .with_params_info(["obj: Obj", ret])
+                        .with_comments([format!("/// the game property or field `{cs}` {on}")])
                         .set_into_module_raw(&mut instance, obj_and(0), method(move |o, _| to_dyn(o.0.get(&get_cs))));
                     count += 1;
                     if *writable == "1" {
-                        FuncRegistration::new_setter(&rname).with_params_info(["obj: Obj", "value: ?", "()"]).set_into_module_raw(
+                        FuncRegistration::new_setter(&rname).with_params_info(["obj: Obj", &format!("value: {ret}"), "()"]).set_into_module_raw(
                             &mut instance,
                             obj_and(1),
                             method(move |o, args| {
