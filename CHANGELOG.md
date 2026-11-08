@@ -5,6 +5,8 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ## [Unreleased]
 
+## [0.7.0] - 2026-11-08
+
 ### Added
 
 - Script mods that appear in the mods folder while the game runs start within a second, without a restart (for example one made by an in-game editor).
@@ -135,7 +137,8 @@ First release.
 - When a method has several overloads, `call` and patching use the first one with a matching number of arguments.
 - Hooks can't read or change a patched method's return value.
 
-[Unreleased]: https://github.com/SafeShows/Oxidizer/compare/v0.6.3...HEAD
+[Unreleased]: https://github.com/SafeShows/Oxidizer/compare/v0.7.0...HEAD
+[0.7.0]: https://github.com/SafeShows/Oxidizer/compare/v0.6.3...v0.7.0
 [0.6.3]: https://github.com/SafeShows/Oxidizer/compare/v0.6.2...v0.6.3
 [0.6.2]: https://github.com/SafeShows/Oxidizer/compare/v0.6.1...v0.6.2
 [0.6.1]: https://github.com/SafeShows/Oxidizer/compare/v0.6.0...v0.6.1
