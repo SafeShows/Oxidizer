@@ -1,5 +1,5 @@
 # Builds the modding guide in book/ with MkDocs (Material theme) and publishes it to GitHub Pages:
-# https://oxidizer.safeshows.dev/
+# https://safeshows.github.io/Oxidizer/
 name: docs
 
 on:

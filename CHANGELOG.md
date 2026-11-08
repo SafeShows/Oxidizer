@@ -7,7 +7,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ### Added
 
-- `oxidizer --bindgen <file>.json` writes the game's API as data: every type and member with its C# signature, its Rust binding and its Rhai form. The [modding guide](https://oxidizer.safeshows.dev/)'s Game API page is built from it.
+- `oxidizer --bindgen <file>.json` writes the game's API as data: every type and member with its C# signature, its Rust binding and its Rhai form. The [modding guide](https://safeshows.github.io/Oxidizer/)'s Game API page is built from it.
 
 ## [0.7.0] - 2026-11-08
 

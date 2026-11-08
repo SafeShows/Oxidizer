@@ -2,7 +2,7 @@
 
 A mod loader for Kitten Space Agency, written in Rust. Mods can be written in Rust (cdylib) or as Rhai scripts. Runs on Windows, Linux and macOS (Apple Silicon, with the [macOS port](https://github.com/renancamm/ksa-macos-port)), on its own or as a [StarMap](https://github.com/StarMapLoader/StarMap) mod next to C# mods.
 
-**Modding guide:** https://oxidizer.safeshows.dev/: making Rhai and Rust mods, step by step.
+**Modding guide:** https://safeshows.github.io/Oxidizer/: making Rhai and Rust mods, step by step.
 
 ![The two example mods, one in Rhai and one in Rust, drawing ImGui windows in game](docs/screenshot.png)
 

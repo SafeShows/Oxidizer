@@ -1,8 +1,8 @@
-# The modding guide, built with MkDocs and the Material theme: https://oxidizer.safeshows.dev/
+# The modding guide, built with MkDocs and the Material theme: https://safeshows.github.io/Oxidizer/
 # Preview locally: pip install mkdocs-material==9.8.1, then `mkdocs serve -f book/mkdocs.yml`.
 site_name: Oxidizer modding guide
 site_description: Write Kitten Space Agency mods in Rust and Rhai with Oxidizer.
-site_url: https://oxidizer.safeshows.dev/
+site_url: https://safeshows.github.io/Oxidizer/
 repo_url: https://github.com/SafeShows/Oxidizer
 repo_name: SafeShows/Oxidizer
 edit_uri: edit/master/book/src/
