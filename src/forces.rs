@@ -28,7 +28,11 @@ fn read() -> std::sync::RwLockReadGuard<'static, Vec<&'static Force>> {
 /// Registers a callback for mod `id`, patching the game the first time.
 pub fn register(id: &'static str, cb: ForceFn, user: usize) -> u8 {
     if !ENABLED.load(Relaxed) {
-        if (crate::internal().enable_forces)() == 0 {
+        let Some(enable) = crate::internal().enable_forces else {
+            crate::log("physics forces need a newer bridge (bridge/Oxidizer.Bridge.dll is older than Oxidizer)");
+            return 0;
+        };
+        if enable() == 0 {
             return 0; // the bridge logged why
         }
         ENABLED.store(true, Relaxed);
@@ -83,5 +87,5 @@ pub extern "C" fn api_register(cb: ForceFn, user: usize) -> u8 {
 }
 
 pub extern "C" fn api_vehicle_key(vehicle: oxidizer_api::Handle) -> u64 {
-    (crate::internal().vehicle_key)(vehicle)
+    crate::internal().vehicle_key.map_or(0, |key| key(vehicle))
 }

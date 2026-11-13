@@ -34,10 +34,11 @@ pub struct Internal {
     pub kind: extern "C" fn(oxidizer_api::Handle) -> u8,
     /// Removes a hook (its callback and user value) from every method it patches.
     pub unhook: extern "C" fn(usize, usize),
-    /// Patches the game's physics for mods' forces: 1 when in place (or already).
-    pub enable_forces: extern "C" fn() -> u8,
+    /// Patches the game's physics for mods' forces: 1 when in place (or already). None from a bridge older than
+    /// this loader (the table starts zeroed), which then has no forces instead of crashing.
+    pub enable_forces: Option<extern "C" fn() -> u8>,
     /// Key of a vehicle (KSA.Vehicle handle) as force callbacks see it.
-    pub vehicle_key: extern "C" fn(oxidizer_api::Handle) -> u64,
+    pub vehicle_key: Option<extern "C" fn(oxidizer_api::Handle) -> u64>,
 }
 
 static INTERNAL: OnceLock<&'static Internal> = OnceLock::new();
@@ -152,7 +153,7 @@ extern "C" fn on_menu() {
 /// `bridge_init` must be the bridge's `Init`, called once, before the game's `Main`.
 pub unsafe fn attach(bridge_init: BridgeInit, instance: &str) -> Result<(), String> {
     let api: &'static mut MaybeUninit<Api> = Box::leak(Box::new(MaybeUninit::uninit()));
-    let internals: &'static mut MaybeUninit<Internal> = Box::leak(Box::new(MaybeUninit::uninit()));
+    let internals: &'static mut MaybeUninit<Internal> = Box::leak(Box::new(MaybeUninit::zeroed()));
     let instance: &'static str = Box::leak(instance.into());
     unsafe {
         (&raw mut (*api.as_mut_ptr()).log).write(api_log);
