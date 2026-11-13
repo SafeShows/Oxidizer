@@ -52,6 +52,7 @@ public unsafe struct Host
     public byte* Instance; // UTF-8 instance folder, empty for the normal Documents folder
     public nuint InstanceLen;
     public delegate* unmanaged<void> Loaded; // the game finished loading its content and mods
+    public delegate* unmanaged<ForceInput*, ForceOutput*, byte> Force; // mods' physics forces (see Forces.cs)
 }
 
 public static unsafe class Bridge
@@ -82,6 +83,7 @@ public static unsafe class Bridge
             Describer.Fill(internals);
             _api = api;
             _host = *host;
+            Forces.Native = host->Force; // the game is only patched once a mod registers a force (EnableForces)
             api->Free = &Free;
             api->Get = &Get;
             api->Set = &Set;
@@ -408,6 +410,18 @@ public static unsafe class Bridge
             return 1;
         }
         catch (Exception e) { Error($"patch {Str(ty, tyLen)}.{Str(m, mLen)}", e); return 0; }
+    }
+
+    /// Patches the game's physics for mods' forces (the first time a mod registers one): 1 when in place.
+    [UnmanagedCallersOnly]
+    internal static byte EnableForces() => (byte)(Forces.Enable(Harmony, Log) ? 1 : 0);
+
+    /// The key force callbacks get for a vehicle (KSA.Vehicle), 0 for null or not an object.
+    [UnmanagedCallersOnly]
+    internal static ulong VehicleKey(nint h)
+    {
+        try { return Obj(h) is { } v ? Forces.KeyOf(v) : 0; }
+        catch (Exception e) { Error("vehicle_key", e); return 0; }
     }
 
     /// Removes a hook (callback and user value) from every method: a Rust mod being reloaded. The Harmony patch

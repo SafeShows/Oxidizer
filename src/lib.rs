@@ -7,6 +7,7 @@
 
 mod bus;
 mod debug;
+mod forces;
 mod ksa_rhai;
 mod mods;
 mod perf;
@@ -33,6 +34,10 @@ pub struct Internal {
     pub kind: extern "C" fn(oxidizer_api::Handle) -> u8,
     /// Removes a hook (its callback and user value) from every method it patches.
     pub unhook: extern "C" fn(usize, usize),
+    /// Patches the game's physics for mods' forces: 1 when in place (or already).
+    pub enable_forces: extern "C" fn() -> u8,
+    /// Key of a vehicle (KSA.Vehicle handle) as force callbacks see it.
+    pub vehicle_key: extern "C" fn(oxidizer_api::Handle) -> u64,
 }
 
 static INTERNAL: OnceLock<&'static Internal> = OnceLock::new();
@@ -52,6 +57,8 @@ pub struct Host {
     instance_len: usize,
     /// After the game loaded its content and mods.
     loaded: extern "C" fn(),
+    /// Mods' physics forces, from the game's worker threads (see forces.rs).
+    force: extern "C" fn(*const oxidizer_api::physics::ForceInput, *mut oxidizer_api::physics::ForceOutput) -> u8,
 }
 
 pub fn log(s: &str) {
@@ -118,6 +125,7 @@ extern "C" fn on_frame(t: f64, dt: f64) {
         rust_mods::reload_changed();
     });
     bus::deliver(); // events published since the last frame, before mods' frame()
+    forces::report_time();
     rust_mods::call_frame(t, dt);
     script::call_all("frame", (t, dt));
 }
@@ -148,7 +156,7 @@ pub unsafe fn attach(bridge_init: BridgeInit, instance: &str) -> Result<(), Stri
     let instance: &'static str = Box::leak(instance.into());
     unsafe {
         (&raw mut (*api.as_mut_ptr()).log).write(api_log);
-        let host = Host { frame: on_frame, gui: on_gui, menu: on_menu, instance: instance.as_ptr(), instance_len: instance.len(), loaded: on_loaded };
+        let host = Host { frame: on_frame, gui: on_gui, menu: on_menu, instance: instance.as_ptr(), instance_len: instance.len(), loaded: on_loaded, force: forces::dispatch };
         if bridge_init(api.as_mut_ptr(), &host, internals.as_mut_ptr()) == 0 {
             return Err("bridge init failed".into());
         }
@@ -170,6 +178,9 @@ pub unsafe fn attach(bridge_init: BridgeInit, instance: &str) -> Result<(), Stri
         (&raw mut (*p).service_provide).write(bus::api_provide);
         (&raw mut (*p).service_reply).write(bus::api_reply);
         (&raw mut (*p).service_call).write(bus::api_call);
+        // API version 6: physics forces.
+        (&raw mut (*p).force_register).write(forces::api_register);
+        (&raw mut (*p).vehicle_key).write(forces::api_vehicle_key);
         let api: &'static Api = api.assume_init_ref();
         oxidizer_api::set_api(api);
         load_mods(api);

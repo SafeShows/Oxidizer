@@ -121,6 +121,7 @@ fn begin(m: &RustMod) {
     table.mod_id = m.id.as_ptr();
     table.mod_id_len = m.id.len();
     table.patch = api_patch;
+    table.force_register = api_force_register;
     let table: &'static Api = Box::leak(Box::new(table));
     run(m.id, || (m.init)(table));
 }
@@ -136,6 +137,11 @@ extern "C" fn api_patch(ty: *const u8, tn: usize, me: *const u8, mn: usize, post
         lock(&HOOKS).push(hook);
     }
     ok
+}
+
+/// A mod's physics force: its own, so a reload takes it out (the core times it per mod).
+extern "C" fn api_force_register(cb: oxidizer_api::physics::ForceFn, user: usize) -> u8 {
+    crate::forces::register(RUNNING.get().unwrap_or("(unknown)"), cb, user)
 }
 
 extern "C" fn timed_hook(hook: usize, instance: oxidizer_api::Handle, args: oxidizer_api::Handle) -> u8 {
@@ -232,7 +238,7 @@ fn reload(old: RustMod) {
     ui::set_status(id, "Rust", None);
 }
 
-/// Takes out what a mod added: its hooks, event subscriptions and services.
+/// Takes out what a mod added: its hooks, event subscriptions, services and physics forces.
 fn forget(id: &str) {
     let hooks: Vec<usize> = {
         let mut all = lock(&HOOKS);
@@ -244,4 +250,5 @@ fn forget(id: &str) {
         (internal().unhook)(timed_hook as *const () as usize, hook); // the Hook stays allocated: the bridge may be running it
     }
     bus::forget(id);
+    crate::forces::forget(id);
 }

@@ -1,0 +1,4 @@
+name = "force_rust"
+
+[oxidizer]
+dll = "bin/force_rust"

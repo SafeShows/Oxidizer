@@ -73,6 +73,7 @@ nav:
       - Typed bindings: rust/bindings.md
       - Windows and menus: rust/ui.md
       - Hooks: rust/hooks.md
+      - Physics forces: rust/physics.md
       - Keys, settings and more: rust/more.md
   - Events and services: events.md
   - Reference:

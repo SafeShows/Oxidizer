@@ -31,7 +31,7 @@ thread_local! {
     static STACK: RefCell<Vec<(String, Instant)>> = const { RefCell::new(Vec::new()) };
 }
 
-fn add(name: &str, d: Duration) {
+pub(crate) fn add(name: &str, d: Duration) {
     let mut p = PERF.lock().unwrap_or_else(|e| e.into_inner());
     match p.mods.get_mut(name) {
         Some(s) => s.now += d,

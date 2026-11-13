@@ -1,6 +1,6 @@
 [package]
 name = "oxidizer_api"
-version = "0.6.0"
+version = "0.7.0"
 edition = "2024"
 description = "API for writing Kitten Space Agency mods in Rust, loaded by the Oxidizer mod loader"
 license = "MIT"

@@ -5,6 +5,10 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ## [Unreleased]
 
+### Added
+
+- Physics forces for Rust mods (`oxidizer_api::physics`, API version 6): `register_force` adds a mod's forces and torques to vehicles inside the game's physics, once or more per substep, on the game's physics worker threads. The callback gets the vehicle's state in plain data (position, velocity, attitude, atmosphere, mass, the game's own drag areas) and a key that `physics::vehicle_key` gives for a `KSA.Vehicle`. The game's `PhysicsStates.ComputeDerivatives` takes span arguments, which the generic hooks can't patch, so the bridge injects the call with a transpiler; nothing is patched until a mod registers a force. A reload removes a mod's callbacks. Example: `examples/force_rust`.
+
 ## [0.11.0] - 2026-11-08
 
 ### Added

@@ -13,6 +13,7 @@ use std::sync::OnceLock;
 pub mod bind;
 pub mod bus;
 pub mod imgui;
+pub mod physics;
 
 pub use bus::{Event, Service, Subscription, call, call_json, provide, provide_json, publish, publish_json, publish_retained, publish_retained_json, subscribe, subscribe_json};
 /// Re-exported for `#[derive(Serialize, Deserialize)]` on event and service types (`oxidizer_api::serde`).
@@ -25,7 +26,8 @@ pub use serde_json;
 /// Version 3 added reading the log and mod status, and running Rhai code.
 /// Version 4 added `Mod::loaded`.
 /// Version 5 added the event bus and services, and gave each mod its own table with its id.
-pub const API_VERSION: u32 = 5;
+/// Version 6 added physics forces ([`physics`]).
+pub const API_VERSION: u32 = 6;
 
 /// .NET GCHandle. 0 = null.
 pub type Handle = usize;
@@ -99,6 +101,11 @@ pub struct Api {
     pub service_reply: extern "C" fn(*const u8, usize),
     /// (caller, service name, JSON arguments) -> 1 when it returned; `last_text` then has the JSON result, else the error.
     pub service_call: extern "C" fn(*const u8, usize, *const u8, usize, *const u8, usize) -> u8,
+    // ---- API version 6 (filled by the loader) ----
+    /// (callback, user) -> 1 when registered and the game's physics is patched. See [`physics`].
+    pub force_register: extern "C" fn(physics::ForceFn, usize) -> u8,
+    /// Key of a `KSA.Vehicle` as force callbacks see it, 0 for null.
+    pub vehicle_key: extern "C" fn(Handle) -> u64,
 }
 
 // The table only holds function pointers and a pointer to a string that lives as long as the process.
