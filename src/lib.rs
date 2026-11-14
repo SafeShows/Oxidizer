@@ -12,6 +12,7 @@ mod ksa_rhai;
 mod mods;
 mod perf;
 mod rust_mods;
+mod saves;
 mod script;
 mod ui;
 
@@ -107,6 +108,33 @@ extern "C" fn api_rhai_result(buf: *mut u8, cap: usize) -> usize {
     EVAL_RESULT.with_borrow(|r| write_out(r, buf, cap))
 }
 
+fn text<'a>(p: *const u8, n: usize) -> &'a str {
+    if p.is_null() {
+        return "";
+    }
+    std::str::from_utf8(unsafe { std::slice::from_raw_parts(p, n) }).unwrap_or("")
+}
+
+extern "C" fn api_save_get(m: *const u8, mn: usize, k: *const u8, kn: usize) -> u8 {
+    match saves::get(text(m, mn), text(k, kn)) {
+        Some(v) => {
+            bus::set_last(v.to_string());
+            1
+        }
+        None => 0,
+    }
+}
+
+extern "C" fn api_save_set(m: *const u8, mn: usize, k: *const u8, kn: usize, j: *const u8, jn: usize) -> u8 {
+    match serde_json::from_str(text(j, jn)) {
+        Ok(v) => {
+            saves::set(text(m, mn), text(k, kn), v);
+            1
+        }
+        Err(_) => 0,
+    }
+}
+
 /// Whether the game has finished loading: script mods that start later get loaded() right after init().
 pub(crate) static LOADED: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
 
@@ -115,6 +143,7 @@ extern "C" fn on_loaded() {
         return; // once, even if the game loads its mods again
     }
     log("game loaded");
+    saves::install();
     rust_mods::call_loaded();
     script::call_all("loaded", ());
 }
@@ -182,6 +211,9 @@ pub unsafe fn attach(bridge_init: BridgeInit, instance: &str) -> Result<(), Stri
         // API version 6: physics forces.
         (&raw mut (*p).force_register).write(forces::api_register);
         (&raw mut (*p).vehicle_key).write(forces::api_vehicle_key);
+        // ... and per-save data.
+        (&raw mut (*p).save_get).write(api_save_get);
+        (&raw mut (*p).save_set).write(api_save_set);
         let api: &'static Api = api.assume_init_ref();
         oxidizer_api::set_api(api);
         load_mods(api);

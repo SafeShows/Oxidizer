@@ -49,6 +49,9 @@ Everything in the [`oxidizer_api`](https://crates.io/crates/oxidizer_api) crate,
 | `key_down(key: &str) -> bool` | True while held. |
 | `config_path(mod_id: &str) -> PathBuf` | `<game documents>/oxidizer/<mod_id>.toml`, for your settings (its folder is created). |
 | `mods_dir() -> PathBuf` | The game's mods folder. |
+| `save::get<T: DeserializeOwned>(key: &str) -> Option<T>` | This mod's value in the current save game (0.7, Oxidizer 0.12). Read it in `Mod::save_loaded`. |
+| `save::set<T: Serialize>(key: &str, value: &T)` | Sets it; written when the game writes the save. Set it in `Mod::saving`. |
+| `save::remove(key)`, `save::get_json`, `save::set_json` | Removing a value, and the same with JSON text. |
 
 ## Log, mod states, Rhai
 

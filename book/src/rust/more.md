@@ -47,3 +47,19 @@ With `oxidizer_api` 0.4 (Oxidizer 0.7.0 and later):
 - [`mods_dir()`](https://docs.rs/oxidizer_api/latest/oxidizer_api/fn.mods_dir.html) is the game's mods folder.
 
 [Rhai Studio](https://github.com/SafeShows/oxidizer-rhai-studio) is built on these: its console is `rhai_eval` and `log_lines`, and its status labels come from `mod_statuses`.
+
+## Data per save game
+
+What belongs to one game rather than to every game goes with the player's save (`oxidizer_api` 0.7, Oxidizer 0.12): set it in `saving`, read it in `save_loaded`.
+
+```rust
+fn saving(&mut self) {
+    oxidizer_api::save::set("missions_done", &self.missions_done); // any serde type
+}
+
+fn save_loaded(&mut self) {
+    self.missions_done = oxidizer_api::save::get("missions_done").unwrap_or_default();
+}
+```
+
+The values are written into the save's own folder (`saves/<save>/oxidizer/<mod>.json`). A new game, or a save from before your mod, has none.

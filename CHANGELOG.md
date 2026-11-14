@@ -8,6 +8,11 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 ### Added
 
 - Physics forces for Rust mods (`oxidizer_api::physics`, API version 6): `register_force` adds a mod's forces and torques to vehicles inside the game's physics, once or more per substep, on the game's physics worker threads. The callback gets the vehicle's state in plain data (position, velocity, attitude, atmosphere, mass, the game's own drag areas) and a key that `physics::vehicle_key` gives for a `KSA.Vehicle`. The game's `PhysicsStates.ComputeDerivatives` takes span arguments, which the generic hooks can't patch, so the bridge injects the call with a transpiler; nothing is patched until a mod registers a force. A reload removes a mod's callbacks. Example: `examples/force_rust`.
+- Data per save game, for Rust and Rhai mods: `oxidizer_api::save::{get, set}` and `save_get` / `save_set`, with the callbacks `saving` (the game is about to write a save) and `save_loaded`. Each mod's values are written into the save's own folder as `oxidizer/<mod>.json`, so they travel with the save. `oxidizer_api` 0.7.0 (API version 6) has `Mod::saving` and `Mod::save_loaded`.
+
+### Fixed
+
+- Hooking a method that a class overrides (like `KSA.UncompressedSave.Write`) failed with "has 2 overloads": the inherited method it replaces was counted as a second one.
 
 ## [0.11.0] - 2026-11-08
 

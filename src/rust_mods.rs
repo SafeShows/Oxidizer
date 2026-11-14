@@ -34,6 +34,8 @@ struct RustMod {
     menu: Option<extern "C" fn()>,
     unload: Option<extern "C" fn()>,
     loaded: Option<extern "C" fn()>,
+    saving: Option<extern "C" fn()>,
+    save_loaded: Option<extern "C" fn()>,
 }
 
 static API: OnceLock<&'static Api> = OnceLock::new();
@@ -108,6 +110,8 @@ fn open(id: &'static str, source: &Path) -> Result<RustMod, String> {
             menu: lib.get(b"oxidizer_menu\0").ok().map(|s| *s),
             unload: lib.get(b"oxidizer_unload\0").ok().map(|s| *s),
             loaded: lib.get(b"oxidizer_loaded\0").ok().map(|s| *s),
+            saving: lib.get(b"oxidizer_saving\0").ok().map(|s| *s),
+            save_loaded: lib.get(b"oxidizer_save_loaded\0").ok().map(|s| *s),
         };
         std::mem::forget(lib); // copies stay loaded for the process lifetime (see the top of this file)
         Ok(m)
@@ -179,6 +183,14 @@ pub fn call_gui(dt: f64) {
 
 pub fn call_menu() {
     mods().into_iter().for_each(|m| m.menu.into_iter().for_each(|f| run(m.id, || f())));
+}
+
+pub fn call_saving() {
+    mods().into_iter().for_each(|m| m.saving.into_iter().for_each(|f| run(m.id, || f())));
+}
+
+pub fn call_save_loaded() {
+    mods().into_iter().for_each(|m| m.save_loaded.into_iter().for_each(|f| run(m.id, || f())));
 }
 
 pub fn call_unload() {

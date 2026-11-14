@@ -242,9 +242,13 @@ public static unsafe class Bridge
     /// All methods named `name` on `t` and its base classes, public or not.
     static List<MethodInfo> Overloads(Type t, string name)
     {
+        // From the type up through its bases; a base method that a derived one overrides or hides (same parameter
+        // types) is left out, so `UncompressedSave.Write` is the override, not that plus `GameSave`'s abstract one.
         var found = new List<MethodInfo>();
         for (var c = t; c != null; c = c.BaseType)
-            found.AddRange(c.GetMethods(All | BindingFlags.DeclaredOnly).Where(x => x.Name == name));
+            foreach (var m in c.GetMethods(All | BindingFlags.DeclaredOnly).Where(x => x.Name == name))
+                if (!found.Any(f => f.GetParameters().Select(p => p.ParameterType).SequenceEqual(m.GetParameters().Select(p => p.ParameterType))))
+                    found.Add(m);
         return found;
     }
 

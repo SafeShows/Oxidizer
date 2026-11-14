@@ -236,7 +236,7 @@ fn text<'a>(p: *const u8, n: usize) -> &'a str {
     std::str::from_utf8(unsafe { std::slice::from_raw_parts(p, n) }).unwrap_or("")
 }
 
-fn set_last(s: String) {
+pub(crate) fn set_last(s: String) {
     LAST.with_borrow_mut(|l| *l = s);
 }
 

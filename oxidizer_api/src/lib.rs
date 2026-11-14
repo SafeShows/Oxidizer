@@ -14,6 +14,7 @@ pub mod bind;
 pub mod bus;
 pub mod imgui;
 pub mod physics;
+pub mod save;
 
 pub use bus::{Event, Service, Subscription, call, call_json, provide, provide_json, publish, publish_json, publish_retained, publish_retained_json, subscribe, subscribe_json};
 /// Re-exported for `#[derive(Serialize, Deserialize)]` on event and service types (`oxidizer_api::serde`).
@@ -26,7 +27,7 @@ pub use serde_json;
 /// Version 3 added reading the log and mod status, and running Rhai code.
 /// Version 4 added `Mod::loaded`.
 /// Version 5 added the event bus and services, and gave each mod its own table with its id.
-/// Version 6 added physics forces ([`physics`]).
+/// Version 6 added physics forces ([`physics`]), per-save data ([`save`]) and `Mod::saving` / `Mod::save_loaded`.
 pub const API_VERSION: u32 = 6;
 
 /// .NET GCHandle. 0 = null.
@@ -106,6 +107,10 @@ pub struct Api {
     pub force_register: extern "C" fn(physics::ForceFn, usize) -> u8,
     /// Key of a `KSA.Vehicle` as force callbacks see it, 0 for null.
     pub vehicle_key: extern "C" fn(Handle) -> u64,
+    /// (mod id, key) -> 1 and the value as JSON in `last_text`, or 0 when there is none. See [`save`].
+    pub save_get: extern "C" fn(*const u8, usize, *const u8, usize) -> u8,
+    /// (mod id, key, JSON value; `null` removes) -> 0 when the JSON isn't valid.
+    pub save_set: extern "C" fn(*const u8, usize, *const u8, usize, *const u8, usize) -> u8,
 }
 
 // The table only holds function pointers and a pointer to a string that lives as long as the process.
@@ -367,6 +372,10 @@ pub trait Mod: Send + 'static {
     /// When the game closes, and before a hot reload replaces this mod with a new build: save what should survive,
     /// and stop threads the mod started.
     fn unload(&mut self) {}
+    /// The game is about to write a save: put what this save should remember into it with [`save::set`].
+    fn saving(&mut self) {}
+    /// The game loaded a save: read what it remembered with [`save::get`].
+    fn save_loaded(&mut self) {}
 }
 
 #[doc(hidden)]
@@ -419,6 +428,14 @@ macro_rules! oxidizer_mod {
         #[unsafe(no_mangle)]
         pub extern "C" fn oxidizer_unload() {
             __oxidizer_with("unload", |m| $crate::Mod::unload(m))
+        }
+        #[unsafe(no_mangle)]
+        pub extern "C" fn oxidizer_saving() {
+            __oxidizer_with("saving", |m| $crate::Mod::saving(m))
+        }
+        #[unsafe(no_mangle)]
+        pub extern "C" fn oxidizer_save_loaded() {
+            __oxidizer_with("save_loaded", |m| $crate::Mod::save_loaded(m))
         }
     };
 }

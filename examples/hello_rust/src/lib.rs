@@ -22,6 +22,19 @@ impl Mod for Hello {
         log("hello_rust: the game has loaded");
     }
 
+    /// The game is about to write a save: what this save should remember (Oxidizer 0.12+).
+    fn saving(&mut self) {
+        oxidizer_api::save::set("frames_at_save", &self.frames);
+    }
+
+    /// The game loaded a save: what it remembered.
+    fn save_loaded(&mut self) {
+        match oxidizer_api::save::get::<u64>("frames_at_save") {
+            Some(n) => log(&format!("hello_rust: this save was made at frame {n}")),
+            None => log("hello_rust: this save has nothing from hello_rust"),
+        }
+    }
+
     fn frame(&mut self, _t: f64, _dt: f64) {
         self.frames += 1;
     }

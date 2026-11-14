@@ -36,3 +36,21 @@ fn menu() {
 ```
 
 Values can be bools, integers, floats and strings. They are written to `<game documents>/oxidizer/<mod id>.toml` at most once a second and when the game closes. That file is outside your mod's folder, so updating the mod keeps them.
+
+## Data per save game
+
+Settings are the same in every game. For what belongs to one game (missions done, a colony's stock, where a probe was sent), keep it with the player's save (Oxidizer 0.12 and later):
+
+```rust
+fn saving() {
+    // The game is about to write a save: put in what this save should remember.
+    save_set("missions_done", this.missions_done);
+}
+
+fn save_loaded() {
+    // The game loaded a save: read it back.
+    this.missions_done = save_get("missions_done", 0);
+}
+```
+
+Values are numbers, strings, bools, arrays and maps. They are written into the save's own folder (`saves/<save>/oxidizer/<mod>.json`), so they travel with the save. A save from before your mod, or a new game, has none: `save_get` gives the default.

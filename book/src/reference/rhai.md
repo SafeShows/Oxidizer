@@ -17,6 +17,8 @@ Functions your script defines; Oxidizer calls them. All are optional. See [Callb
 | `menu()` | While the game's **Mods** menu is open. |
 | `reload()` | After the file was saved and reloaded. |
 | `unload()` | When the game closes. |
+| `saving()` | The game is about to write a save: set what it should remember with `save_set` (0.12+). |
+| `save_loaded()` | The game loaded a save: read it with `save_get` (0.12+). |
 
 Inside callbacks, `this` is the mod's object map; it keeps its values across calls and hot reloads.
 
@@ -76,6 +78,8 @@ See [Hooks](../rhai/hooks.md).
 | `key_down(key: String)` | `bool` | True while the key is held. |
 | `config_get(key: String, default: ?)` | `?` | The saved value, or `default`. |
 | `config_set(key: String, value: bool \| int \| float \| String)` | `()` | Saves a value; an error for other types. |
+| `save_get(key: String, default: ?)` | `?` | This mod's value in the current save game, or `default`. 0.12+. |
+| `save_set(key: String, value: ?)` | `()` | Sets this mod's value in the current save game, written with the next save; `()` removes it. Numbers, strings, bools, arrays and maps. 0.12+. |
 
 ## Windows (inside `gui`)
 

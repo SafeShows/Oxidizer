@@ -531,6 +531,16 @@ fn engine() -> Engine {
     });
 
     // keys, by the game's key names ("F5", "K", "Space"); pressed = this frame only
+    // per-save data (see saves.rs): written with the game's save, back when it loads
+    e.def("save_get", &["key: string", "default: ?", "?"], "This mod's value for key in the current save game, or default. Set with save_set; best read in save_loaded().", move |k: &str, default: Dynamic| -> Result<Dynamic, Box<EvalAltResult>> {
+        Ok(crate::saves::get(&script_who()?, k).map(|v| json_to_dyn(&v.to_string())).unwrap_or(default))
+    })
+    .def("save_set", &["key: string", "value: ?", "()"], "Sets this mod's key in the current save game: written when the game saves (do it in saving()). () removes it.", move |k: &str, v: Dynamic| -> Result<(), Box<EvalAltResult>> {
+        let v: serde_json::Value = serde_json::from_str(&dyn_to_json(&v)?).map_err(|e| e.to_string())?;
+        crate::saves::set(&script_who()?, k, v);
+        Ok(())
+    });
+
     // breakpoints (Rhai Studio uses these; see debug.rs)
     e.def("debug_breakpoints", &["source: string", "lines: array", "()"], "Sets the breakpoint lines of a script, named \"mod/file.rhai\"; an empty array clears them. A mod that reaches one is paused until debug_continue.", |source: &str, lines: Array| {
         crate::debug::set_breakpoints(source, lines.iter().filter_map(|l| l.as_int().ok()).filter(|&l| l > 0).map(|l| l as usize).collect());
