@@ -312,6 +312,22 @@ public static unsafe class Bridge
         catch (Exception e) { Error($"get {Str(m, mLen)}", e); return 0; }
     }
 
+    /// Like Get on an object, for Oxidizer's inspector: nothing logged when a getter throws (some do), just 0.
+    [UnmanagedCallersOnly]
+    internal static nint GetQuiet(nint h, byte* m, nuint mLen)
+    {
+        try
+        {
+            var obj = Obj(h);
+            if (obj == null) return 0;
+            var (t, name) = (obj.GetType(), Str(m, mLen));
+            if (AccessTools.Property(t, name) is { } p) return Handle(p.GetValue(obj));
+            if (AccessTools.Field(t, name) is { } f) return Handle(f.GetValue(obj));
+        }
+        catch { }
+        return 0;
+    }
+
     [UnmanagedCallersOnly]
     static byte Set(nint h, byte* ty, nuint tyLen, byte* m, nuint mLen, nint value)
     {

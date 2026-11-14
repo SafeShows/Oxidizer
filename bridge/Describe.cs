@@ -17,6 +17,7 @@ public unsafe struct Internal
     public delegate* unmanaged<nint, nint, void> Unhook;
     public delegate* unmanaged<byte> EnableForces;
     public delegate* unmanaged<nint, ulong> VehicleKey;
+    public delegate* unmanaged<nint, byte*, nuint, nint> GetQuiet;
 }
 
 public static unsafe class Describer
@@ -31,6 +32,7 @@ public static unsafe class Describer
         i->Unhook = &Bridge.Unhook;
         i->EnableForces = &Bridge.EnableForces;
         i->VehicleKey = &Bridge.VehicleKey;
+        i->GetQuiet = &Bridge.GetQuiet;
     }
 
     /// The public types and members of KSA.dll, one per line, tab-separated:

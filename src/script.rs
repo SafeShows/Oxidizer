@@ -531,6 +531,14 @@ fn engine() -> Engine {
     });
 
     // keys, by the game's key names ("F5", "K", "Space"); pressed = this frame only
+    // what a game object holds (Rhai Studio's inspector; see inspect.rs)
+    e.def("inspect", &["value: ?", "string"], "A game object's public properties and fields (type, current value, whether it can be set) and its first items, as JSON.", |v: Dynamic| {
+        match v.clone().try_cast::<RObj>() {
+            Some(o) => crate::inspect::inspect(&o.0).to_string(),
+            None => serde_json::json!({ "type": v.type_name(), "text": v.to_string(), "count": null, "members": [], "items": [] }).to_string(),
+        }
+    });
+
     // per-save data (see saves.rs): written with the game's save, back when it loads
     e.def("save_get", &["key: string", "default: ?", "?"], "This mod's value for key in the current save game, or default. Set with save_set; best read in save_loaded().", move |k: &str, default: Dynamic| -> Result<Dynamic, Box<EvalAltResult>> {
         Ok(crate::saves::get(&script_who()?, k).map(|v| json_to_dyn(&v.to_string())).unwrap_or(default))

@@ -129,6 +129,12 @@ Names start with the owning mod's id; only that mod publishes on or provides the
 
 Values are numbers, strings, bools, arrays and object maps (they cross as JSON). `subscribe` and `provide` work in a script, not in the console.
 
+## Inspecting the game
+
+| Function | Returns | Does |
+|---|---|---|
+| `inspect(value: ?)` | `String` | What a game object holds right now, as JSON: its type, its public properties and fields (type, current value, static, whether it can be set) and its first 100 items if it is a collection. Rhai Studio's INSPECT panel shows it. 0.12+. |
+
 ## Breakpoints
 
 What [Rhai Studio](../rhai/editor.md#breakpoints) uses; a source is `"mod/file.rhai"`. 0.11+.

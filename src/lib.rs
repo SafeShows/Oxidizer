@@ -7,6 +7,7 @@
 
 mod bus;
 mod debug;
+mod inspect;
 mod forces;
 mod ksa_rhai;
 mod mods;
@@ -40,6 +41,8 @@ pub struct Internal {
     pub enable_forces: Option<extern "C" fn() -> u8>,
     /// Key of a vehicle (KSA.Vehicle handle) as force callbacks see it.
     pub vehicle_key: Option<extern "C" fn(oxidizer_api::Handle) -> u64>,
+    /// Reads a member like `get`, without logging when its getter throws (0 then). None from an older bridge.
+    pub get_quiet: Option<extern "C" fn(oxidizer_api::Handle, *const u8, usize) -> oxidizer_api::Handle>,
 }
 
 static INTERNAL: OnceLock<&'static Internal> = OnceLock::new();

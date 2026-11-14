@@ -4,6 +4,12 @@
 
 [Rhai Studio](https://github.com/SafeShows/oxidizer-rhai-studio) is an editor inside the game: syntax colors, Ctrl+S saves and reloads, errors above the editor, a new-mod wizard, and a console that runs Rhai against the live game. Install it like any mod and press F9. It also has autocomplete, an API explorer, and breakpoints (below).
 
+### Inspector and watches
+
+Rhai Studio's **INSPECT** panel shows the running game object by object: start from any expression (the controlled vehicle by default), click an object to go into it, and click a number, bool or string that can be set to change it. **WATCH** evaluates expressions every frame and graphs the numbers, for tuning an autopilot or checking what the physics does. Both need Oxidizer 0.12 (Rhai Studio 1.3); `inspect(value)` gives other tools the same as JSON.
+
+A struct (a `double3`, a quaternion) is shown as a copy: setting its fields doesn't change the object it came from.
+
 ### Breakpoints
 
 Click left of a line number in Rhai Studio to set a breakpoint (Oxidizer 0.11 and Rhai Studio 1.2 or later). When the mod reaches that line, Oxidizer takes a snapshot: the function's variables, `this`, and the call stack. The **DEBUG** panel shows them, and the line is highlighted.
