@@ -1,4 +1,4 @@
-//! Physics forces example: while F7 is held, pushes the controlled vehicle along its body +X axis (the nose, for the
+//! Physics forces example: while F8 is held, pushes the controlled vehicle along its body +X axis (the nose, for the
 //! game's rockets) with twice its weight, so a rocket standing on the pad lifts off with no engine. Every 2 s it
 //! logs how often the force callback ran and whether it saw the controlled vehicle.
 //!
@@ -42,7 +42,7 @@ impl Mod for ForceExample {
     fn frame(&mut self, _t: f64, dt: f64) {
         let vehicle = Obj::static_get("KSA.Program, KSA", "ControlledVehicle");
         TARGET.store(physics::vehicle_key(&vehicle), Relaxed);
-        PUSH.store(key_down("F7"), Relaxed);
+        PUSH.store(key_down("F8"), Relaxed);
         self.since += dt;
         if self.since >= 2.0 {
             log(&format!(

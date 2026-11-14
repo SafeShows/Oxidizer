@@ -5,6 +5,8 @@ Start with **Mods > Oxidizer** in the game's menu bar: it lists every Oxidizer m
 **The game got slower with mods.**
 **Mods > Oxidizer > Performance** lists what each mod costs per frame (0.11 and later): its callbacks, hooks, events and services, on average and in the worst frame of the last second. At 60 fps a frame has 16.7 ms; a mod using more than a millisecond or two is the one to look at.
 
+![Mods > Oxidizer > Performance: milliseconds per frame for each mod](assets/screenshots/performance.png)
+
 **My mod isn't in the list.**
 Check that the folder is directly in the mods folder (`mods/my_mod/mod.toml`, not `mods/my_mod/my_mod/mod.toml`), that `mod.toml` has an `[oxidizer]` section with `script` or `dll`, and that the mod isn't disabled in the game's mod list.
 

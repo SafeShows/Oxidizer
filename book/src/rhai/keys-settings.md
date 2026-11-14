@@ -54,3 +54,5 @@ fn save_loaded() {
 ```
 
 Values are numbers, strings, bools, arrays and maps. They are written into the save's own folder (`saves/<save>/oxidizer/<mod>.json`), so they travel with the save. A save from before your mod, or a new game, has none: `save_get` gives the default.
+
+![The log after loading a save: "hello_rust: this save was made at frame 10109"](../assets/screenshots/save-data.png)

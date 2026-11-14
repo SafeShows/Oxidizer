@@ -62,4 +62,6 @@ fn save_loaded(&mut self) {
 }
 ```
 
-The values are written into the save's own folder (`saves/<save>/oxidizer/<mod>.json`). A new game, or a save from before your mod, has none.
+The values are written into the save's own folder (`saves/<save>/oxidizer/<mod>.json`). A new game, or a save from before your mod, has none. `examples/hello_rust` keeps its frame count per save:
+
+![The log after loading a save: "hello_rust: this save was made at frame 10109"](../assets/screenshots/save-data.png)

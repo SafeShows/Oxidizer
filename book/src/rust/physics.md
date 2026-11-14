@@ -54,4 +54,8 @@ between threads. So:
 A reload of the mod removes its callbacks; `init` registers them again.
 
 [`examples/force_rust`](https://github.com/SafeShows/Oxidizer/tree/master/examples/force_rust) pushes the
-controlled vehicle while F7 is held.
+controlled vehicle while F8 is held. Below, a Rhai Studio watch on the vehicle's acceleration jumps by 2 g while
+F8 is held, and the example's log counts the callback's calls:
+
+![A watch graph of the acceleration stepping up while the force is applied, and the force_rust log](../assets/screenshots/forces.png)
+

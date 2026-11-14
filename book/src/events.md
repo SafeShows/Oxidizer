@@ -105,3 +105,6 @@ Subscriptions and services name a Rhai function, so they survive a reload: after
 ## Watching it
 
 **Mods > Oxidizer > Event bus** lists the topics with their subscriber counts and retained values, the services, and the last events.
+
+![The Event bus section: topics with subscribers and a retained value, services, recent events](assets/screenshots/event-bus.png)
+

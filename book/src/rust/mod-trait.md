@@ -31,6 +31,8 @@ Rebuild the mod and copy the library into its `bin/` folder while the game runs 
 2. its [hooks](hooks.md), [event subscriptions and services](../events.md) are removed,
 3. the new version starts: `init`, then `loaded` if the game has already loaded.
 
+![The log after copying in a new build: "reloaded rust mod bus_rust", then the new build's first message](../assets/screenshots/hot-reload.png)
+
 The log says `reloaded rust mod my_mod`. If the new library can't load (built for a newer API, say), the running version keeps going and the log says why.
 
 What to know:
