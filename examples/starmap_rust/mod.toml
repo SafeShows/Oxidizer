@@ -1,0 +1,4 @@
+name = "starmap_rust"
+
+[oxidizer]
+dll = "bin/starmap_rust"

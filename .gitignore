@@ -4,3 +4,5 @@
 
 # MkDocs output
 /book/site
+/examples/starmap_cs/bin
+/examples/starmap_cs/obj

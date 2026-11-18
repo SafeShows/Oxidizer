@@ -1,0 +1,4 @@
+name = "starmap_rhai"
+
+[oxidizer]
+script = "main.rhai"

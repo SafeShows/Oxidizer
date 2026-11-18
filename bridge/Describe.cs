@@ -18,6 +18,14 @@ public unsafe struct Internal
     public delegate* unmanaged<byte> EnableForces;
     public delegate* unmanaged<nint, ulong> VehicleKey;
     public delegate* unmanaged<nint, byte*, nuint, nint> GetQuiet;
+    public delegate* unmanaged<byte> StarMapAvailable;
+    public delegate* unmanaged<byte*, nuint, byte*, nuint, long> StarMapSubscribe;
+    public delegate* unmanaged<long, void> StarMapUnsubscribe;
+    public delegate* unmanaged<byte*, nuint, byte*, nuint, byte*, nuint, nint, byte> StarMapPublish;
+    public delegate* unmanaged<long*, nint*, byte> StarMapNext;
+    public delegate* unmanaged<byte*, nuint, nuint> StarMapJson;
+    public delegate* unmanaged<byte*, nuint, nuint> StarMapError;
+    public delegate* unmanaged<byte*, nuint, nuint> StarMapWaiting;
 }
 
 public static unsafe class Describer
@@ -33,6 +41,14 @@ public static unsafe class Describer
         i->EnableForces = &Bridge.EnableForces;
         i->VehicleKey = &Bridge.VehicleKey;
         i->GetQuiet = &Bridge.GetQuiet;
+        i->StarMapAvailable = &StarMapEvents.Available;
+        i->StarMapSubscribe = &StarMapEvents.Subscribe;
+        i->StarMapUnsubscribe = &StarMapEvents.Unsubscribe;
+        i->StarMapPublish = &StarMapEvents.Publish;
+        i->StarMapNext = &StarMapEvents.Next;
+        i->StarMapJson = &StarMapEvents.LastJson;
+        i->StarMapError = &StarMapEvents.LastError;
+        i->StarMapWaiting = &StarMapEvents.Waiting;
     }
 
     /// The public types and members of KSA.dll, one per line, tab-separated:

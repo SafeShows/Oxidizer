@@ -6,6 +6,7 @@ using System;
 using System.IO;
 using System.Runtime.InteropServices;
 using StarMap.API;
+using StarMap.API.Services;
 
 namespace Oxidizer;
 
@@ -13,6 +14,13 @@ namespace Oxidizer;
 public unsafe class StarMapEntry
 {
     static delegate* unmanaged<void> _shutdown;
+
+    /// StarMap (0.5.2+) creates this class with its services; the event bus is handed to Oxidizer's mods through
+    /// StarMapEvents.
+    public StarMapEntry(IEventBus events)
+    {
+        StarMapEvents.Bus = events;
+    }
 
     [StarMapBeforeMain]
     public void BeforeMain()
@@ -38,5 +46,6 @@ public unsafe class StarMapEntry
     public void Unload()
     {
         if (_shutdown != null) _shutdown();
+        StarMapEvents.DisposeAll();
     }
 }

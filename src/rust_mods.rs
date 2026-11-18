@@ -263,4 +263,5 @@ fn forget(id: &str) {
     }
     bus::forget(id);
     crate::forces::forget(id);
+    crate::starmap::forget(id);
 }

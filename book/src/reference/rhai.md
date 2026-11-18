@@ -129,6 +129,18 @@ Names start with the owning mod's id; only that mod publishes on or provides the
 
 Values are numbers, strings, bools, arrays and object maps (they cross as JSON). `subscribe` and `provide` work in a script, not in the console.
 
+## StarMap's event bus
+
+Only with Oxidizer.StarMap (StarMap 0.5.2+). Types are named `"Namespace.Type, Assembly"`; each function also takes a channel name after the type for StarMap's named channels. See [StarMap's event bus](../starmap-events.md). 0.13+.
+
+| Function | Returns | Does |
+|---|---|---|
+| `starmap_available()` | `bool` | Whether StarMap's bus is there. |
+| `starmap_subscribe(type_name: String, function: String)` | `()` | Calls `function(message)` in this script for each message of the C# type, at the start of the next frame; `message` is a game object. Waits for types that load later. |
+| `starmap_unsubscribe(type_name: String, function: String)` | `()` | Stops that. |
+| `starmap_publish(type_name: String, message: ?)` | `()` | Publishes a message: a game object of the type, or a map of its properties. |
+| `starmap_forward(type_name: String)` | `String` | Copies the type's messages onto Oxidizer's bus as maps; returns the topic (`starmap.<Type>`). |
+
 ## Inspecting the game
 
 | Function | Returns | Does |

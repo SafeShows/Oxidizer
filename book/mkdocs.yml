@@ -76,6 +76,7 @@ nav:
       - Physics forces: rust/physics.md
       - Keys, settings and more: rust/more.md
   - Events and services: events.md
+  - StarMap's event bus: starmap-events.md
   - Reference:
       - Rhai API: reference/rhai.md
       - Rust API: reference/rust.md

@@ -1,0 +1,13 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!-- A C# StarMap mod for trying Oxidizer's pass-through to StarMap's event bus (see README.md). -->
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <AssemblyName>StarTest</AssemblyName>
+    <RootNamespace>StarTest</RootNamespace>
+    <GenerateDependencyFile>false</GenerateDependencyFile>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="StarMap.API" Version="0.5.4" ExcludeAssets="runtime" PrivateAssets="all" />
+  </ItemGroup>
+</Project>

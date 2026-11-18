@@ -1,6 +1,6 @@
 # Rust API reference
 
-Everything in the [`oxidizer_api`](https://crates.io/crates/oxidizer_api) crate, version 0.6 (Oxidizer 0.9 and later; events and services are new in 0.6, `Mod::loaded` in 0.5, the rest is in 0.4 and Oxidizer 0.7). The same items, with their doc comments, are on [docs.rs](https://docs.rs/oxidizer_api).
+Everything in the [`oxidizer_api`](https://crates.io/crates/oxidizer_api) crate, version 0.8 (Oxidizer 0.13 and later; StarMap's bus is new in 0.8, forces and per-save data in 0.7, events and services in 0.6, `Mod::loaded` in 0.5, the rest is in 0.4 and Oxidizer 0.7). The same items, with their doc comments, are on [docs.rs](https://docs.rs/oxidizer_api).
 
 ## The mod
 
@@ -115,6 +115,19 @@ Names start with the owning mod's id; only that mod publishes on or provides the
 | `publish_json`, `publish_retained_json`, `subscribe_json`, `provide_json`, `call_json` | The same with JSON text, for names and shapes not known at compile time. |
 | `bus::mod_id() -> &'static str` | This mod's id. |
 | `serde`, `serde_json` | Re-exported; derive with `#[serde(crate = "oxidizer_api::serde")]`. |
+
+## StarMap's event bus: `starmap`
+
+Only with Oxidizer.StarMap (StarMap 0.5.2+); `channel` is `""` for StarMap's default channel. See [StarMap's event bus](../starmap-events.md). 0.8+ (Oxidizer 0.13).
+
+| Item | |
+|---|---|
+| `starmap::subscribe(type_name, channel, impl Fn(Obj, &str)) -> Result<Subscription, String>` | Each message of the C# type as a game object and its JSON, at the start of the next frame. |
+| `starmap::subscribe_as<T: DeserializeOwned>(type_name, channel, impl Fn(T))` | The same, turned into `T`. |
+| `starmap::publish<T: Serialize>(type_name, channel, &T)` | Publishes a message made from `T`'s JSON. |
+| `starmap::publish_json`, `starmap::publish_obj` | From JSON text, or a game object of the type. |
+| `starmap::forward(type_name, channel) -> Result<String, String>` | Copies the type's messages onto Oxidizer's bus; returns the topic. |
+| `starmap::Subscription` | Unsubscribes when dropped; `.forever()` keeps it. |
 
 ## `bind`
 

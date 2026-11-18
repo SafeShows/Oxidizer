@@ -234,6 +234,17 @@ pub fn deliver_event(script: &str, function: &str, json: &str) {
     call(&s.engine, i, &mut m, function, (json_to_dyn(json),));
 }
 
+/// Calls a script's function with a game object (a StarMap message): like deliver_event.
+pub fn deliver_obj(script: &str, function: &str, obj: Obj) {
+    let (Some(s), Some(i)) = (SCRIPTS.get(), index_of(script)) else { return };
+    let Some(m) = mods().get(i).cloned() else { return };
+    let Some(mut m) = lock(&m) else {
+        log(&format!("{script}: busy, missed a StarMap message for {function}"));
+        return;
+    };
+    call(&s.engine, i, &mut m, function, (RObj::new(obj),));
+}
+
 /// Runs a script's service function: its result as JSON, or the error (which doesn't stop the script).
 pub fn call_service(script: &str, function: &str, args: &str) -> Result<String, String> {
     let (Some(s), Some(i)) = (SCRIPTS.get(), index_of(script)) else { return Err(format!("{script} isn't loaded")) };
@@ -538,6 +549,33 @@ fn engine() -> Engine {
             None => serde_json::json!({ "type": v.type_name(), "text": v.to_string(), "count": null, "members": [], "items": [] }).to_string(),
         }
     });
+
+    // StarMap's event bus (see starmap.rs): C# messages named by type, "Namespace.Type, Assembly"
+    let sm_sub = move |ty: &str, ch: &str, f: &str| -> Result<(), Box<EvalAltResult>> {
+        let script = script_who()?;
+        crate::starmap::subscribe(&script, ty, ch, crate::starmap::Target::Rhai { script: script.clone(), function: f.into() })?;
+        Ok(())
+    };
+    let sm_unsub = move |ty: &str, ch: &str, f: &str| -> Result<(), Box<EvalAltResult>> {
+        crate::starmap::unsubscribe_target(ty, ch, &crate::starmap::Target::Rhai { script: script_who()?, function: f.into() });
+        Ok(())
+    };
+    let sm_pub = |ty: &str, ch: &str, v: Dynamic| -> Result<(), Box<EvalAltResult>> {
+        match v.clone().try_cast::<RObj>() {
+            Some(o) => crate::starmap::publish(ty, ch, "", o.0.handle())?,
+            None => crate::starmap::publish(ty, ch, &dyn_to_json(&v)?, 0)?,
+        }
+        Ok(())
+    };
+    e.def("starmap_subscribe", &["type_name: string", "function: string", "()"], "Calls function(message) in this script for each StarMap message of a C# type (\"Namespace.Type, Assembly\"); message is a game object. Needs Oxidizer.StarMap.", move |t: &str, f: &str| sm_sub(t, "", f))
+        .def("starmap_subscribe", &["type_name: string", "channel: string", "function: string", "()"], "The same, on a StarMap named channel.", move |t: &str, c: &str, f: &str| sm_sub(t, c, f))
+        .def("starmap_unsubscribe", &["type_name: string", "function: string", "()"], "Stops starmap_subscribe.", move |t: &str, f: &str| sm_unsub(t, "", f))
+        .def("starmap_unsubscribe", &["type_name: string", "channel: string", "function: string", "()"], "Stops starmap_subscribe on a channel.", move |t: &str, c: &str, f: &str| sm_unsub(t, c, f))
+        .def("starmap_publish", &["type_name: string", "message: ?", "()"], "Publishes a StarMap message of a C# type: a game object of that type, or a map whose keys are its properties.", move |t: &str, v: Dynamic| sm_pub(t, "", v))
+        .def("starmap_publish", &["type_name: string", "channel: string", "message: ?", "()"], "The same, on a StarMap named channel.", move |t: &str, c: &str, v: Dynamic| sm_pub(t, c, v))
+        .def("starmap_forward", &["type_name: string", "string"], "Copies a C# type's StarMap messages onto Oxidizer's bus as maps; returns the topic to subscribe() to (starmap.<Type>).", |t: &str| -> Result<String, Box<EvalAltResult>> { Ok(crate::starmap::forward(t, "")?) })
+        .def("starmap_forward", &["type_name: string", "channel: string", "string"], "The same for a named channel (topic starmap.<Type>/<channel>).", |t: &str, c: &str| -> Result<String, Box<EvalAltResult>> { Ok(crate::starmap::forward(t, c)?) })
+        .def("starmap_available", &["bool"], "Whether StarMap's event bus is there (Oxidizer runs as Oxidizer.StarMap, StarMap 0.5.2+).", crate::starmap::available);
 
     // per-save data (see saves.rs): written with the game's save, back when it loads
     e.def("save_get", &["key: string", "default: ?", "?"], "This mod's value for key in the current save game, or default. Set with save_set; best read in save_loaded().", move |k: &str, default: Dynamic| -> Result<Dynamic, Box<EvalAltResult>> {

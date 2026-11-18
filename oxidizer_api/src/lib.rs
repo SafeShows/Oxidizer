@@ -15,6 +15,7 @@ pub mod bus;
 pub mod imgui;
 pub mod physics;
 pub mod save;
+pub mod starmap;
 
 pub use bus::{Event, Service, Subscription, call, call_json, provide, provide_json, publish, publish_json, publish_retained, publish_retained_json, subscribe, subscribe_json};
 /// Re-exported for `#[derive(Serialize, Deserialize)]` on event and service types (`oxidizer_api::serde`).
@@ -28,7 +29,8 @@ pub use serde_json;
 /// Version 4 added `Mod::loaded`.
 /// Version 5 added the event bus and services, and gave each mod its own table with its id.
 /// Version 6 added physics forces ([`physics`]), per-save data ([`save`]) and `Mod::saving` / `Mod::save_loaded`.
-pub const API_VERSION: u32 = 6;
+/// Version 7 added StarMap's event bus ([`starmap`]).
+pub const API_VERSION: u32 = 7;
 
 /// .NET GCHandle. 0 = null.
 pub type Handle = usize;
@@ -111,6 +113,14 @@ pub struct Api {
     pub save_get: extern "C" fn(*const u8, usize, *const u8, usize) -> u8,
     /// (mod id, key, JSON value; `null` removes) -> 0 when the JSON isn't valid.
     pub save_set: extern "C" fn(*const u8, usize, *const u8, usize, *const u8, usize) -> u8,
+    // ---- API version 7 (filled by the loader) ----
+    /// (caller mod id, C# type name, channel, callback, user) -> subscription id, 0 on error (in `last_text`).
+    pub starmap_subscribe: extern "C" fn(*const u8, usize, *const u8, usize, *const u8, usize, starmap::StarMapFn, usize) -> u64,
+    pub starmap_unsubscribe: extern "C" fn(u64),
+    /// (type name, channel, JSON, game object handle or 0 to use the JSON) -> 1 when published.
+    pub starmap_publish: extern "C" fn(*const u8, usize, *const u8, usize, *const u8, usize, Handle) -> u8,
+    /// (type name, channel) -> 1 and the Oxidizer bus topic in `last_text`, or 0 and the error.
+    pub starmap_forward: extern "C" fn(*const u8, usize, *const u8, usize) -> u8,
 }
 
 // The table only holds function pointers and a pointer to a string that lives as long as the process.

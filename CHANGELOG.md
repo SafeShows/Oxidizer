@@ -5,6 +5,14 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ## [Unreleased]
 
+### Added
+
+- StarMap's event bus for Rust and Rhai mods, when Oxidizer runs as Oxidizer.StarMap: subscribe to and publish StarMap's C# messages by type name (`"Namespace.Type, Assembly"`, optional channel), as game objects, typed serde values or JSON, or forward a type onto Oxidizer's own bus (topic `starmap.<Type>`). Messages arrive at the start of the next frame on the game's thread. Subscriptions to types from StarMap mods that load later wait for them. Rhai: `starmap_subscribe`, `starmap_unsubscribe`, `starmap_publish`, `starmap_forward`, `starmap_available`. Rust: `oxidizer_api::starmap` (`oxidizer_api` 0.8.0, API version 7). Examples: `starmap_cs` (a C# StarMap mod), `starmap_rhai`, `starmap_rust`.
+
+### Changed
+
+- Oxidizer.StarMap needs StarMap 0.5.2 or later: StarMap hands it the event bus through its constructor.
+
 ## [0.12.0] - 2026-11-14
 
 ### Added

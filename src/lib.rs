@@ -15,6 +15,7 @@ mod perf;
 mod rust_mods;
 mod saves;
 mod script;
+mod starmap;
 mod ui;
 
 use oxidizer_api::{Api, imgui};
@@ -43,6 +44,16 @@ pub struct Internal {
     pub vehicle_key: Option<extern "C" fn(oxidizer_api::Handle) -> u64>,
     /// Reads a member like `get`, without logging when its getter throws (0 then). None from an older bridge.
     pub get_quiet: Option<extern "C" fn(oxidizer_api::Handle, *const u8, usize) -> oxidizer_api::Handle>,
+    /// StarMap's event bus (see starmap.rs and bridge/StarMapEvents.cs); None from an older bridge.
+    pub starmap_available: Option<extern "C" fn() -> u8>,
+    pub starmap_subscribe: Option<extern "C" fn(*const u8, usize, *const u8, usize) -> i64>,
+    pub starmap_unsubscribe: Option<extern "C" fn(i64)>,
+    pub starmap_publish: Option<extern "C" fn(*const u8, usize, *const u8, usize, *const u8, usize, oxidizer_api::Handle) -> u8>,
+    pub starmap_next: Option<extern "C" fn(*mut i64, *mut oxidizer_api::Handle) -> u8>,
+    pub starmap_json: Option<extern "C" fn(*mut u8, usize) -> usize>,
+    pub starmap_error: Option<extern "C" fn(*mut u8, usize) -> usize>,
+    /// Type names whose subscriptions still wait for their StarMap mod, one per line.
+    pub starmap_waiting: Option<extern "C" fn(*mut u8, usize) -> usize>,
 }
 
 static INTERNAL: OnceLock<&'static Internal> = OnceLock::new();
@@ -138,6 +149,37 @@ extern "C" fn api_save_set(m: *const u8, mn: usize, k: *const u8, kn: usize, j: 
     }
 }
 
+extern "C" fn api_starmap_subscribe(c: *const u8, cn: usize, t: *const u8, tn: usize, ch: *const u8, chn: usize, cb: starmap::StarMapFn, user: usize) -> u64 {
+    match starmap::subscribe(text(c, cn), text(t, tn), text(ch, chn), starmap::Target::Rust { cb, user }) {
+        Ok(id) => id as u64,
+        Err(e) => {
+            bus::set_last(e);
+            0
+        }
+    }
+}
+
+extern "C" fn api_starmap_unsubscribe(id: u64) {
+    starmap::unsubscribe(id as i64);
+}
+
+extern "C" fn api_starmap_publish(t: *const u8, tn: usize, ch: *const u8, chn: usize, j: *const u8, jn: usize, h: oxidizer_api::Handle) -> u8 {
+    match starmap::publish(text(t, tn), text(ch, chn), text(j, jn), h) {
+        Ok(()) => 1,
+        Err(e) => {
+            bus::set_last(e);
+            0
+        }
+    }
+}
+
+extern "C" fn api_starmap_forward(t: *const u8, tn: usize, ch: *const u8, chn: usize) -> u8 {
+    let r = starmap::forward(text(t, tn), text(ch, chn));
+    let ok = r.is_ok();
+    bus::set_last(r.unwrap_or_else(|e| e));
+    ok as u8
+}
+
 /// Whether the game has finished loading: script mods that start later get loaded() right after init().
 pub(crate) static LOADED: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
 
@@ -147,6 +189,7 @@ extern "C" fn on_loaded() {
     }
     log("game loaded");
     saves::install();
+    starmap::report_waiting();
     rust_mods::call_loaded();
     script::call_all("loaded", ());
 }
@@ -158,6 +201,7 @@ extern "C" fn on_frame(t: f64, dt: f64) {
         rust_mods::reload_changed();
     });
     bus::deliver(); // events published since the last frame, before mods' frame()
+    starmap::deliver(); // and StarMap's (forwards land on the bus for the next frame)
     forces::report_time();
     rust_mods::call_frame(t, dt);
     script::call_all("frame", (t, dt));
@@ -217,6 +261,11 @@ pub unsafe fn attach(bridge_init: BridgeInit, instance: &str) -> Result<(), Stri
         // ... and per-save data.
         (&raw mut (*p).save_get).write(api_save_get);
         (&raw mut (*p).save_set).write(api_save_set);
+        // API version 7: StarMap's event bus.
+        (&raw mut (*p).starmap_subscribe).write(api_starmap_subscribe);
+        (&raw mut (*p).starmap_unsubscribe).write(api_starmap_unsubscribe);
+        (&raw mut (*p).starmap_publish).write(api_starmap_publish);
+        (&raw mut (*p).starmap_forward).write(api_starmap_forward);
         let api: &'static Api = api.assume_init_ref();
         oxidizer_api::set_api(api);
         load_mods(api);

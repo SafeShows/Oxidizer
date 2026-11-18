@@ -1,0 +1,4 @@
+name = "StarTest"
+
+[StarMap]
+EntryAssembly = "StarTest"

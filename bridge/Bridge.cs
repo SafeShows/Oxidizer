@@ -179,7 +179,7 @@ public static unsafe class Bridge
 
     // ---- helpers ----
 
-    static void Log(string s)
+    internal static void Log(string s)
     {
         var b = Encoding.UTF8.GetBytes(s);
         fixed (byte* p = b) _api->Log(p, (nuint)b.Length);
@@ -194,11 +194,11 @@ public static unsafe class Bridge
         Log(msg);
     }
 
-    static string Str(byte* p, nuint n) => n == 0 ? "" : Encoding.UTF8.GetString(p, (int)n);
-    static object? Obj(nint h) => h == 0 ? null : GCHandle.FromIntPtr(h).Target;
-    static nint Handle(object? o) => o == null ? 0 : GCHandle.ToIntPtr(GCHandle.Alloc(o));
+    internal static string Str(byte* p, nuint n) => n == 0 ? "" : Encoding.UTF8.GetString(p, (int)n);
+    internal static object? Obj(nint h) => h == 0 ? null : GCHandle.FromIntPtr(h).Target;
+    internal static nint Handle(object? o) => o == null ? 0 : GCHandle.ToIntPtr(GCHandle.Alloc(o));
 
-    static Type FindType(string name) =>
+    internal static Type FindType(string name) =>
         Types.GetOrAdd(name, n => Type.GetType(n) ?? AccessTools.TypeByName(n))
         ?? throw new TypeLoadException($"type not found: {name}");
 
