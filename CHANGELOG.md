@@ -5,6 +5,8 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ## [Unreleased]
 
+## [0.13.0] - 2026-11-18
+
 ### Added
 
 - StarMap's event bus for Rust and Rhai mods, when Oxidizer runs as Oxidizer.StarMap: subscribe to and publish StarMap's C# messages by type name (`"Namespace.Type, Assembly"`, optional channel), as game objects, typed serde values or JSON, or forward a type onto Oxidizer's own bus (topic `starmap.<Type>`). Messages arrive at the start of the next frame on the game's thread. Subscriptions to types from StarMap mods that load later wait for them. Rhai: `starmap_subscribe`, `starmap_unsubscribe`, `starmap_publish`, `starmap_forward`, `starmap_available`. Rust: `oxidizer_api::starmap` (`oxidizer_api` 0.8.0, API version 7). Examples: `starmap_cs` (a C# StarMap mod), `starmap_rhai`, `starmap_rust`.
@@ -200,7 +202,8 @@ First release.
 - When a method has several overloads, `call` and patching use the first one with a matching number of arguments.
 - Hooks can't read or change a patched method's return value.
 
-[Unreleased]: https://github.com/SafeShows/Oxidizer/compare/v0.12.0...HEAD
+[Unreleased]: https://github.com/SafeShows/Oxidizer/compare/v0.13.0...HEAD
+[0.13.0]: https://github.com/SafeShows/Oxidizer/compare/v0.12.0...v0.13.0
 [0.12.0]: https://github.com/SafeShows/Oxidizer/compare/v0.11.0...v0.12.0
 [0.11.0]: https://github.com/SafeShows/Oxidizer/compare/v0.10.0...v0.11.0
 [0.10.0]: https://github.com/SafeShows/Oxidizer/compare/v0.9.1...v0.10.0
