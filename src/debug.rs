@@ -54,7 +54,7 @@ pub fn install(engine: &mut Engine) {
     );
 }
 
-fn text(v: &Dynamic) -> String {
+pub(crate) fn text(v: &Dynamic) -> String {
     let s = v.to_string();
     if s.chars().count() > 200 { format!("{}...", s.chars().take(200).collect::<String>()) } else { s }
 }

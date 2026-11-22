@@ -247,7 +247,7 @@ dependencies = [
 
 [[package]]
 name = "oxidizer"
-version = "0.13.0"
+version = "0.14.0"
 dependencies = [
  "libloading",
  "oxidizer_api",
@@ -258,7 +258,7 @@ dependencies = [
 
 [[package]]
 name = "oxidizer_api"
-version = "0.8.0"
+version = "0.8.1"
 dependencies = [
  "libloading",
  "serde",

@@ -57,6 +57,14 @@ struct Fns {
     is_key_down: unsafe extern "C" fn(i32) -> bool,
     is_key_pressed: unsafe extern "C" fn(i32, bool) -> bool,
     set_keyboard_focus_here: unsafe extern "C" fn(i32),
+    set_cursor_pos: unsafe extern "C" fn(*const ImVec2),
+    set_next_item_width: unsafe extern "C" fn(f32),
+    set_next_window_pos: unsafe extern "C" fn(*const ImVec2, i32, *const ImVec2),
+    // (label, current item, items separated by zeros and ended by two, popup height in items)
+    combo: unsafe extern "C" fn(S, *mut i32, S, i32) -> bool,
+    progress_bar: unsafe extern "C" fn(f32, *const ImVec2, S),
+    color_edit4: unsafe extern "C" fn(S, *mut [f32; 4], i32) -> bool,
+    input_int: unsafe extern "C" fn(S, *mut i32, i32, i32, i32) -> bool,
 }
 
 fn fns() -> &'static Fns {
@@ -100,6 +108,13 @@ fn fns() -> &'static Fns {
             is_key_down: sym!("IsKeyDown"),
             is_key_pressed: sym!("IsKeyPressed"),
             set_keyboard_focus_here: sym!("SetKeyboardFocusHere"),
+            set_cursor_pos: sym!("SetCursorPos"),
+            set_next_item_width: sym!("SetNextItemWidth"),
+            set_next_window_pos: sym!("SetNextWindowPos"),
+            combo: sym!("Combo_1"),
+            progress_bar: sym!("ProgressBar"),
+            color_edit4: sym!("ColorEdit4"),
+            input_int: sym!("InputInt"),
         };
         std::mem::forget(lib);
         f
@@ -301,6 +316,45 @@ pub fn ctrl_shortcut(key: char) -> bool {
         return false;
     }
     unsafe { (fns().is_key_down)(MOD_CTRL) && (fns().is_key_pressed)(KEY_A + (key as i32 - 'A' as i32), false) }
+}
+
+/// Where the next widget goes, in pixels from the window's top-left corner (inside its padding and title bar).
+pub fn set_cursor_pos(x: f32, y: f32) {
+    unsafe { (fns().set_cursor_pos)(&ImVec2 { x, y }) }
+}
+
+/// Width of the next widget in pixels (negative: fill the row except that much).
+pub fn set_next_item_width(w: f32) {
+    unsafe { (fns().set_next_item_width)(w) }
+}
+
+/// Position of the next window the first time it is ever shown (later the player's position is kept).
+pub fn set_next_window_pos(x: f32, y: f32) {
+    unsafe { (fns().set_next_window_pos)(&ImVec2 { x, y }, COND_FIRST_USE_EVER, &ImVec2 { x: 0.0, y: 0.0 }) }
+}
+
+/// A drop-down list; `current` is the chosen item's index. Returns true when the choice changed.
+pub fn combo(label: &str, current: &mut i32, items: &[&str]) -> bool {
+    let mut list: Vec<u8> = items.iter().flat_map(|i| i.replace('\0', "").into_bytes().into_iter().chain([0])).collect();
+    list.extend([0, 0]);
+    unsafe { (fns().combo)(c(label).as_ptr(), current, list.as_ptr() as S, -1) }
+}
+
+/// A progress bar filled to `fraction` (0..1) across the row, with optional text over it ("" shows the percentage).
+pub fn progress_bar(fraction: f32, overlay: &str) {
+    let text = c(overlay);
+    let overlay = if overlay.is_empty() { std::ptr::null() } else { text.as_ptr() };
+    unsafe { (fns().progress_bar)(fraction, &ImVec2 { x: -f32::MIN_POSITIVE, y: 0.0 }, overlay) }
+}
+
+/// A color swatch and RGBA fields (0..1). Returns true when it changed.
+pub fn color_edit(label: &str, rgba: &mut [f32; 4]) -> bool {
+    unsafe { (fns().color_edit4)(c(label).as_ptr(), rgba, 0) }
+}
+
+/// A whole-number field with - and + buttons. Returns true when it changed.
+pub fn input_int(label: &str, v: &mut i32) -> bool {
+    unsafe { (fns().input_int)(c(label).as_ptr(), v, 1, 100, 0) }
 }
 
 /// Puts the keyboard focus on a widget: `0` the next one, `-1` the one just drawn (e.g. to keep typing in a

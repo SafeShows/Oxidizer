@@ -14,6 +14,7 @@ mod mods;
 mod perf;
 mod rust_mods;
 mod saves;
+mod probes;
 mod script;
 mod starmap;
 mod ui;
@@ -345,8 +346,8 @@ fn load_mods(api: &'static Api) {
                 }
             }
         }
-        if let Some(script) = &e.script {
-            ok &= script::start_mod(&e.id, script);
+        if let Some(paths) = e.script_files() {
+            ok &= script::start_mod(&e.id, &paths);
         }
         if ok {
             mods::mark_started(e);

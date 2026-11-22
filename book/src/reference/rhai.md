@@ -103,6 +103,13 @@ See [Hooks](../rhai/hooks.md).
 | `begin_child(id: String, height: float)` / `end_child()` | `bool` / `()` | A scrolling region; always call `end_child()`. 0.8+. |
 | `set_next_window_size(width: float, height: float)` | `()` | The next window's first size. 0.8+. |
 | `ctrl_shortcut(key: String)` | `bool` | Ctrl plus the letter this frame, also while typing. 0.8+. |
+| `input_int(label: String, value: int)` | `int` | A whole-number field with - and + buttons; returns the new value. 0.14+. |
+| `combo(label: String, index: int, items: Array)` | `int` | A drop-down list of strings; returns the chosen index (-1: none). 0.14+. |
+| `color_edit(label: String, color: Array)` | `Array` | A color picker; returns `[r, g, b, a]` (0..1). 0.14+. |
+| `progress_bar(fraction: float, text: String)` | `()` | A bar across the row filled to fraction (0..1), with text over it (`""`: the percentage). 0.14+. |
+| `set_cursor_pos(x: float, y: float)` | `()` | Where the next widget goes, in pixels from the window's top-left corner. 0.14+. |
+| `set_next_item_width(width: float)` | `()` | The next widget's width in pixels (negative: the row minus that much). 0.14+. |
+| `set_next_window_pos(x: float, y: float)` | `()` | The next window's screen position the first time it is shown. 0.14+. |
 
 ## The Mods menu (inside `menu`)
 
@@ -156,6 +163,15 @@ What [Rhai Studio](../rhai/editor.md#breakpoints) uses; a source is `"mod/file.r
 | `debug_breakpoints(source: String, lines: Array)` | `()` | Sets a script's breakpoint lines (empty clears them). A mod that reaches one is paused until `debug_continue`. |
 | `debug_state()` | `String` | The breakpoints, and what each saw when last hit (variables, `this`, call stack, whether the mod is paused), as JSON. |
 | `debug_continue(mod_id: String)` | `()` | Lets a paused mod run again. |
+
+## Graph scripts
+
+What Rhai Studio's graph editor uses for live wire values. 0.14+.
+
+| Function | Returns | Does |
+|---|---|---|
+| `graph_probe(key: String, value: ?)` | `?` | Returns value. While an editor reads this script's probes, it also records it under key. |
+| `graph_probes(source: String)` | `String` | The latest probed values of a script (`"mod/file.rhai"`) as a JSON object, and keeps recording them for three seconds. |
 
 ## Output
 

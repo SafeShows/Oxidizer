@@ -26,12 +26,18 @@ impl RObj {
     }
 }
 
-struct Script {
-    name: String,
+/// One file of a script mod: its main script, or one of the extra `scripts` in its mod.toml.
+struct File {
     path: PathBuf,
     modified: Option<SystemTime>,
     ast: AST,
     scope: Scope<'static>,
+}
+
+struct Script {
+    name: String,
+    /// The main script first. They share `this`, and each callback runs in every file that defines it.
+    files: Vec<File>,
     this: Dynamic,
     /// Stopped after an error, until the file changes.
     dead: bool,
@@ -143,11 +149,17 @@ fn report(name: &str, problem: String) {
     ui::set_status(name, KIND, Some(problem));
 }
 
-/// Loads one script mod and runs its init(); true when it started without an error. The engine is built when the
-/// first script mod (or the console) needs it. A script that fails stays in the list: saving a fixed file starts it.
-pub fn start_mod(name: &str, path: &Path) -> bool {
+/// Compiles every file of a script mod (the main script first).
+fn compile_all(engine: &Engine, paths: &[PathBuf], name: &str) -> Result<Vec<File>, String> {
+    paths.iter().map(|p| compile(engine, p, name).map(|(ast, scope)| File { path: p.clone(), modified: modified(p), ast, scope })).collect()
+}
+
+/// Loads one script mod (its main script and extra `scripts`) and runs its init(); true when it started without an
+/// error. The engine is built when the first script mod (or the console) needs it. A script that fails stays in the
+/// list: saving a fixed file starts it.
+pub fn start_mod(name: &str, paths: &[PathBuf]) -> bool {
     let s = scripts();
-    let i = add(s, name.to_string(), path.to_path_buf());
+    let i = add(s, name.to_string(), paths);
     let Some(script) = mods().get(i).cloned() else { return false };
     let Some(mut m) = lock(&script) else { return false };
     start(&s.engine, i, &mut m);
@@ -156,16 +168,17 @@ pub fn start_mod(name: &str, path: &Path) -> bool {
 
 /// Compiles a script mod and adds it (with its settings) to the list; returns its index. A script that doesn't
 /// compile stays in the list, so fixing the file starts it.
-fn add(s: &Scripts, name: String, path: PathBuf) -> usize {
-    let modified = modified(&path);
-    let (ast, scope, dead) = match compile(&s.engine, &path, &name) {
-        Ok((ast, scope)) => {
+fn add(s: &Scripts, name: String, paths: &[PathBuf]) -> usize {
+    let (files, dead) = match compile_all(&s.engine, paths, &name) {
+        Ok(files) => {
             log(&format!("loaded script mod {name}"));
-            (ast, scope, false)
+            (files, false)
         }
         Err(e) => {
             report(&name, e);
-            (AST::empty(), Scope::new(), true)
+            // Remember the files (unchanged since), so saving a fixed one starts the mod.
+            let files = paths.iter().map(|p| File { path: p.clone(), modified: modified(p), ast: AST::empty(), scope: Scope::new() }).collect();
+            (files, true)
         }
     };
     let config = oxidizer_api::config_path(&name);
@@ -174,7 +187,7 @@ fn add(s: &Scripts, name: String, path: PathBuf) -> usize {
     CONFIGS.lock().unwrap_or_else(|e| e.into_inner()).push(Config { path: config, table, dirty: false });
     s.names.lock().unwrap_or_else(|e| e.into_inner()).push(name.clone());
     let mut mods = s.mods.lock().unwrap_or_else(|e| e.into_inner());
-    mods.push(Arc::new(Mutex::new(Script { name, path, modified, ast, scope, this: Map::new().into(), dead, started: false })));
+    mods.push(Arc::new(Mutex::new(Script { name, files, this: Map::new().into(), dead, started: false })));
     mods.len() - 1
 }
 
@@ -188,13 +201,13 @@ fn start_new() {
     let (ordered, _) = crate::mods::order(all);
     // Only Rhai mods: Rust mods load when the game starts.
     for e in ordered.iter().filter(|e| e.dll.is_none() && !known.contains(&e.id)) {
-        let Some(script) = &e.script else { continue };
+        let Some(paths) = e.script_files() else { continue };
         if let Err(why) = crate::mods::check(e, &mods_dir, &oxidizer) {
             crate::mods::mark_waiting(e, why);
             continue;
         }
         log(&format!("new script mod {}", e.id));
-        start_mod(&e.id, script);
+        start_mod(&e.id, &paths);
     }
 }
 
@@ -256,10 +269,13 @@ pub fn call_service(script: &str, function: &str, args: &str) -> Result<String, 
     if crate::debug::paused(script) {
         return Err(format!("{script} is paused at a breakpoint"));
     }
-    let outer = CURRENT.replace(i);
     let m = &mut *m;
+    let Some(file) = m.files.iter_mut().find(|f| f.ast.iter_functions().any(|x| x.name == function)) else {
+        return Err(format!("{script} has no function {function}"));
+    };
+    let outer = CURRENT.replace(i);
     let opts = CallFnOptions::new().eval_ast(false).bind_this_ptr(&mut m.this);
-    let result = crate::perf::time(&m.name, || s.engine.call_fn_with_options::<Dynamic>(opts, &mut m.scope, &m.ast, function, (json_to_dyn(args),)));
+    let result = crate::perf::time(&m.name, || s.engine.call_fn_with_options::<Dynamic>(opts, &mut file.scope, &file.ast, function, (json_to_dyn(args),)));
     CURRENT.set(outer);
     dyn_to_json(&result.map_err(|e| e.to_string())?)
 }
@@ -314,14 +330,16 @@ pub fn reload_changed() {
     let Some(s) = SCRIPTS.get() else { return };
     for (i, m) in mods().iter().enumerate() {
         let Some(mut m) = lock(m) else { continue };
-        let t = modified(&m.path);
-        if t == m.modified {
+        if m.files.iter().all(|f| modified(&f.path) == f.modified) {
             continue;
         }
-        m.modified = t;
-        match compile(&s.engine, &m.path, &m.name) {
-            Ok((ast, scope)) => {
-                (m.ast, m.scope, m.dead) = (ast, scope, false);
+        for f in &mut m.files {
+            f.modified = modified(&f.path);
+        }
+        let paths: Vec<PathBuf> = m.files.iter().map(|f| f.path.clone()).collect();
+        match compile_all(&s.engine, &paths, &m.name) {
+            Ok(files) => {
+                (m.files, m.dead) = (files, false);
                 log(&format!("reloaded script mod {}", m.name));
                 ui::set_status(&m.name, KIND, None);
                 if m.started {
@@ -345,26 +363,32 @@ pub fn call_all(f: &str, args: impl FuncArgs + Clone) {
     }
 }
 
-fn call(engine: &Engine, i: usize, m: &mut Script, f: &str, args: impl FuncArgs) -> Option<Dynamic> {
-    if m.dead || !m.ast.iter_functions().any(|x| x.name == f) {
+/// Calls `f` in each of the mod's files that defines it; the last result.
+fn call(engine: &Engine, i: usize, m: &mut Script, f: &str, args: impl FuncArgs + Clone) -> Option<Dynamic> {
+    if m.dead || !m.files.iter().any(|x| x.ast.iter_functions().any(|x| x.name == f)) {
         return None;
     }
     if !matches!(f, "init" | "reload" | "unload") && crate::debug::paused(&m.name) {
         return None; // stopped at a breakpoint: frames, windows, events and hooks wait for "continue"
     }
     let outer = CURRENT.replace(i); // calls nest when a script calls a method another script hooks
-    let opts = CallFnOptions::new().eval_ast(false).bind_this_ptr(&mut m.this);
-    let result = crate::perf::time(&m.name, || engine.call_fn_with_options::<Dynamic>(opts, &mut m.scope, &m.ast, f, args));
-    CURRENT.set(outer);
-    match result {
-        Ok(v) => Some(v),
-        Err(e) => {
-            // Errors in frame/gui would repeat every frame: stop the script until its file changes.
-            m.dead = true;
-            report(&m.name, format!("{f}: {e} (stopped until the file is saved again)"));
-            None
+    let mut last = None;
+    for file in m.files.iter_mut().filter(|x| x.ast.iter_functions().any(|x| x.name == f)) {
+        let opts = CallFnOptions::new().eval_ast(false).bind_this_ptr(&mut m.this);
+        let result = crate::perf::time(&m.name, || engine.call_fn_with_options::<Dynamic>(opts, &mut file.scope, &file.ast, f, args.clone()));
+        match result {
+            Ok(v) => last = Some(v),
+            Err(e) => {
+                // Errors in frame/gui would repeat every frame: stop the script until its file changes.
+                m.dead = true;
+                report(&m.name, format!("{f}: {e} (stopped until the file is saved again)"));
+                last = None;
+                break;
+            }
         }
     }
+    CURRENT.set(outer);
+    last
 }
 
 /// Write settings that changed since the last save.
@@ -470,6 +494,8 @@ impl Def for Engine {
 
 fn engine() -> Engine {
     let mut e = Engine::new();
+    // Rhai Studio's graphs nest blocks deeply (a branch in a loop in a form's button in a window...).
+    e.set_max_expr_depths(128, 128);
     e.on_print(|s| log(s));
     e.on_debug(|s, _, _| log(s));
 
@@ -587,6 +613,13 @@ fn engine() -> Engine {
         Ok(())
     });
 
+    // live values of graph scripts' wires (Rhai Studio's graph editor; see probes.rs)
+    e.def("graph_probe", &["key: string", "value: ?", "?"], "Returns value; while an editor reads this mod's probes, also records it under key.", |ctx: rhai::NativeCallContext, k: &str, v: Dynamic| {
+        crate::probes::record(ctx.call_source().unwrap_or(""), k, &v);
+        v
+    })
+    .def("graph_probes", &["source: string", "string"], "The latest probed values of a script (\"mod/file.rhai\") as a JSON object; also keeps recording them for a few seconds.", crate::probes::read);
+
     // breakpoints (Rhai Studio uses these; see debug.rs)
     e.def("debug_breakpoints", &["source: string", "lines: array", "()"], "Sets the breakpoint lines of a script, named \"mod/file.rhai\"; an empty array clears them. A mod that reaches one is paused until debug_continue.", |source: &str, lines: Array| {
         crate::debug::set_breakpoints(source, lines.iter().filter_map(|l| l.as_int().ok()).filter(|&l| l > 0).map(|l| l as usize).collect());
@@ -637,6 +670,26 @@ fn engine() -> Engine {
         .def("begin_child", &["id: string", "height: float", "bool"], "A scrolling region, height pixels tall (0 fills the window). Always call end_child().", |id: &str, h: f64| imgui::begin_child(id, h as f32))
         .def("end_child", &["()"], "Ends the scrolling region.", imgui::end_child)
         .def("set_next_window_size", &["width: float", "height: float", "()"], "The next window's size when it first appears.", |w: f64, h: f64| imgui::set_next_window_size(w as f32, h as f32))
+        .def("set_cursor_pos", &["x: float", "y: float", "()"], "Where the next widget goes, in pixels from the window's top-left corner.", |x: f64, y: f64| imgui::set_cursor_pos(x as f32, y as f32))
+        .def("set_next_item_width", &["width: float", "()"], "Width of the next widget in pixels (negative: the row's width minus that much).", |w: f64| imgui::set_next_item_width(w as f32))
+        .def("set_next_window_pos", &["x: float", "y: float", "()"], "The next window's position on the screen when it first appears.", |x: f64, y: f64| imgui::set_next_window_pos(x as f32, y as f32))
+        .def("combo", &["label: string", "index: int", "items: array", "int"], "A drop-down list of items (strings); returns the chosen index.", |l: &str, i: i64, items: Array| {
+            let items: Vec<String> = items.iter().map(|v| v.to_string()).collect();
+            let mut i = i.clamp(-1, items.len() as i64 - 1) as i32;
+            imgui::combo(l, &mut i, &items.iter().map(String::as_str).collect::<Vec<_>>());
+            i as i64
+        })
+        .def("progress_bar", &["fraction: float", "text: string", "()"], "A progress bar filled to fraction (0.0 to 1.0) with text over it (\"\" shows the percentage).", |f: f64, t: &str| imgui::progress_bar(f as f32, t))
+        .def("color_edit", &["label: string", "color: array", "array"], "A color picker; returns the new color as [r, g, b, a], 0.0 to 1.0.", |l: &str, color: Array| {
+            let mut c = rgba(&color);
+            imgui::color_edit(l, &mut c);
+            c.iter().map(|&x| Dynamic::from(x as f64)).collect::<Array>()
+        })
+        .def("input_int", &["label: string", "value: int", "int"], "A whole-number field with - and + buttons; returns the new value.", |l: &str, v: i64| {
+            let mut x = v.clamp(i32::MIN as i64, i32::MAX as i64) as i32;
+            imgui::input_int(l, &mut x);
+            x as i64
+        })
         .def("ctrl_shortcut", &["key: string", "bool"], "True on the frame Ctrl and the letter were pressed, also while typing in a text field.", |k: &str| k.chars().next().is_some_and(imgui::ctrl_shortcut));
 
     // menu entries (only inside menu(), which runs inside the "Mods" menu)
@@ -665,5 +718,25 @@ mod tests {
         // Rhai's own to_float and to_int come without names: not ours to fix.
         let bare: Vec<&str> = defs.lines().filter(|l| l.contains("(_: ") && !l.starts_with("fn to_")).collect();
         assert!(bare.is_empty(), "without parameter names: {bare:?}");
+    }
+}
+
+#[cfg(test)]
+mod graph_tests {
+    use rhai::{CallFnOptions, Dynamic, Map, Scope};
+
+    /// What Rhai Studio's graphs rely on: functions called as `this.f()` see the mod's `this`, and probes are
+    /// recorded under the calling script's source.
+    #[test]
+    fn graph_scripts() {
+        let e = super::engine();
+        let mut ast = e.compile("fn add(n) { this.count += n; graph_probe(\"1.out\", this.count) } fn frame() { this.count = 1; this.add(2) }").unwrap();
+        ast.set_source("m/g.rhai");
+        crate::probes::read("m/g.rhai");
+        let mut this: Dynamic = Map::new().into();
+        let opts = CallFnOptions::new().eval_ast(false).bind_this_ptr(&mut this);
+        let r: i64 = e.call_fn_with_options(opts, &mut Scope::new(), &ast, "frame", ()).unwrap();
+        assert_eq!(r, 3);
+        assert_eq!(crate::probes::read("m/g.rhai"), r#"{"1.out":"3"}"#);
     }
 }

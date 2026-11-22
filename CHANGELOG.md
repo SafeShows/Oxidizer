@@ -5,6 +5,19 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ## [Unreleased]
 
+## [0.14.0] - 2026-11-23
+
+### Added
+
+- A Rhai mod can have several scripts: `scripts = ["autopilot.rhai", "ui.rhai"]` in `[oxidizer]`, next to `script`. They load with the main script as one mod: they share its `this`, id, settings and status, each callback (`init`, `frame`, `gui`, ...) runs in every file that defines it, main script first, and saving any of them reloads the mod. Rhai Studio 2.0 adds graph scripts to a mod this way.
+- ImGui layout for Rhai: `set_cursor_pos(x, y)` (in the window), `set_next_item_width(w)` and `set_next_window_pos(x, y)` (the first time it appears). Rhai Studio's form designer places widgets with them.
+- More widgets for Rhai: `combo(label, index, items) -> index`, `progress_bar(fraction, text)`, `color_edit(label, [r, g, b, a]) -> color`, `input_int(label, v) -> v`. Rust: `oxidizer_api::imgui::{set_cursor_pos, set_next_item_width, set_next_window_pos, combo, progress_bar, color_edit, input_int}` (`oxidizer_api` 0.8.1).
+- `graph_probe(key, value)` and `graph_probes(source)`: live values of a script's wires for Rhai Studio's graph editor. `graph_probe` returns its value and records it only while an editor has read the script's probes in the last few seconds.
+
+### Changed
+
+- Rhai scripts may nest expressions and blocks 128 deep (was 64, and 32 inside functions): graph scripts put a branch in a loop in a form's button in a window.
+
 ## [0.13.0] - 2026-11-18
 
 ### Added

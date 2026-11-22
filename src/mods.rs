@@ -3,6 +3,7 @@
 //! ```toml
 //! [oxidizer]
 //! script = "main.rhai"
+//! scripts = ["autopilot.rhai"]                       # more scripts of a Rhai mod: they share its `this`
 //! version = "1.2.0"                                   # this mod's version, for mods that depend on it
 //! dependencies = [
 //!     { id = "weather_core", min = "1.0", max = "1.9.9" },   # must be there (bounds inclusive, both optional)
@@ -35,12 +36,20 @@ pub struct Entry {
     pub dir: PathBuf,
     pub dll: Option<String>,
     pub script: Option<PathBuf>,
+    /// More scripts of a Rhai mod (`scripts = [...]`), loaded with the main one.
+    pub scripts: Vec<PathBuf>,
     pub version: Option<String>,
     pub deps: Vec<Dep>,
     pub load_after: Vec<String>,
 }
 
 impl Entry {
+    /// A Rhai mod's files: its main script, then its extra `scripts`.
+    pub fn script_files(&self) -> Option<Vec<PathBuf>> {
+        let main = self.script.clone()?;
+        Some(std::iter::once(main).chain(self.scripts.iter().cloned()).collect())
+    }
+
     /// The kind shown in the mod list: Rust when the mod has a library.
     pub fn kind(&self) -> &'static str {
         if self.dll.is_some() { "Rust" } else { "Rhai" }
@@ -101,6 +110,7 @@ pub fn read(dir: &Path) -> Option<Entry> {
         dir: dir.to_path_buf(),
         dll: ox.get("dll").and_then(|v| v.as_str()).map(String::from),
         script: ox.get("script").and_then(|v| v.as_str()).map(|s| dir.join(s)),
+        scripts: strings(ox.get("scripts")).into_iter().map(|s| dir.join(s)).collect(),
         version: ox.get("version").and_then(|v| v.as_str()).map(String::from),
         deps: ox.get("dependencies").and_then(|v| v.as_array()).into_iter().flatten().filter_map(dep).collect(),
         load_after: strings(ox.get("load_after")),
@@ -225,6 +235,7 @@ mod tests {
             dir: PathBuf::new(),
             dll: None,
             script: None,
+            scripts: vec![],
             version: None,
             deps: deps.iter().map(|d| Dep { id: (*d).into(), optional: false, min: None, max: None }).collect(),
             load_after: load_after.iter().map(|s| (*s).into()).collect(),

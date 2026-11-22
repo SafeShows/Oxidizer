@@ -19,6 +19,7 @@ Optional keys of `[oxidizer]` (Oxidizer 0.8 and later; see [Dependencies and loa
 | `version = "1.2.0"` | This mod's version, for mods that depend on it with `min` / `max`. |
 | `dependencies = [...]` | Mods to start after. Each is `"id"` or `{ id = "id", optional = true, min = "1.0", max = "2.0" }`; `optional` defaults to false, the bounds are inclusive. |
 | `load_after = ["id", ...]` | Mods to start after when they're installed, without needing them. |
+| `scripts = ["more.rhai", ...]` | More scripts of a Rhai mod, loaded with `script` (0.14+). They share the mod's `this`, settings and status; each callback runs in every file that defines it, the main script first. |
 
 A mod may have both `dll` and `script`. A folder without `[oxidizer]` isn't an Oxidizer mod (it may be a C# or content mod). The folder name is the mod's id.
 

@@ -92,6 +92,13 @@ fn gui(dt) {
 | `begin_child(id, height)` / `end_child()` | A scrolling region with a border; call `end_child()` always. |
 | `set_next_window_size(width, height)` | The next window's size the first time it is shown. |
 | `ctrl_shortcut(key)` | True on the frame Ctrl and the letter were pressed, also while typing in a text field. |
+| `input_int(label, value)` | A whole-number field with - and + buttons; returns the new value. 0.14+. |
+| `combo(label, index, items)` | A drop-down list of strings; returns the chosen index. 0.14+. |
+| `color_edit(label, color)` | A color picker for `[r, g, b, a]`; returns the new color. 0.14+. |
+| `progress_bar(fraction, text)` | A bar filled to fraction (0 to 1) with text over it; `""` shows the percentage. 0.14+. |
+| `set_cursor_pos(x, y)` | Puts the next widget at x, y pixels from the window's top-left corner. 0.14+. |
+| `set_next_item_width(width)` | The next widget's width in pixels. 0.14+. |
+| `set_next_window_pos(x, y)` | The next window's position on the screen the first time it is shown. 0.14+. |
 
 Store what the text and number functions return, as with `checkbox`: a field shows what you pass in, so `input_text("Name", this.name)` without storing the result would undo the player's typing every frame. Sizes are floats: write `300.0`, not `300`.
 
