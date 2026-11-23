@@ -130,6 +130,11 @@ fn rgba(c: &Array) -> [f32; 4] {
     [at(0, 1.0), at(1, 1.0), at(2, 1.0), at(3, 1.0)]
 }
 
+/// Numbers from a script (integers count too; anything else is 0).
+fn floats(a: &Array) -> Vec<f32> {
+    a.iter().map(|v| v.as_float().ok().or(v.as_int().ok().map(|n| n as f64)).unwrap_or(0.0) as f32).collect()
+}
+
 fn modified(path: &Path) -> Option<SystemTime> {
     fs::metadata(path).and_then(|m| m.modified()).ok()
 }
@@ -690,6 +695,50 @@ fn engine() -> Engine {
             imgui::input_int(l, &mut x);
             x as i64
         })
+        .def("begin_ex", &["title: string", "flags: int", "bool"], "begin() with window flags, added up: 1 no title bar, 2 no resize, 4 no move, 32 no collapse, 64 auto-resize. Always call end().", |t: &str, f: i64| imgui::begin_ex(t, None, f as i32))
+        .def("begin_child_ex", &["id: string", "width: float", "height: float", "border: bool", "bool"], "A scrolling region width x height pixels (0 fills that way). Always call end_child().", |id: &str, w: f64, h: f64, b: bool| imgui::begin_child_ex(id, w as f32, h as f32, b))
+        .def("text_wrapped", &["text: string", "()"], "Text wrapped at the window's edge.", |s: &str| imgui::text_wrapped(s))
+        .def("spacing", &["()"], "A little vertical space.", imgui::spacing)
+        .def("radio_button", &["label: string", "active: bool", "bool"], "A radio button, filled when active; true when clicked: `if radio_button(\"A\", this.mode == 0) { this.mode = 0 }`.", |l: &str, a: bool| imgui::radio_button(l, a))
+        .def("slider_int", &["label: string", "value: int", "min: int", "max: int", "int"], "A whole-number slider; returns the new value.", |l: &str, v: i64, min: i64, max: i64| {
+            let mut x = v.clamp(i32::MIN as i64, i32::MAX as i64) as i32;
+            imgui::slider_int(l, &mut x, min as i32, max as i32);
+            x as i64
+        })
+        .def("drag_float", &["label: string", "value: float", "speed: float", "min: float", "max: float", "float"], "A number dragged with the mouse (min == max: no bounds); returns the new value.", |l: &str, v: f64, s: f64, min: f64, max: f64| {
+            let mut x = v as f32;
+            imgui::drag_float(l, &mut x, s as f32, min as f32, max as f32);
+            x as f64
+        })
+        .def("drag_int", &["label: string", "value: int", "speed: float", "min: int", "max: int", "int"], "A whole number dragged with the mouse (min == max: no bounds); returns the new value.", |l: &str, v: i64, s: f64, min: i64, max: i64| {
+            let mut x = v.clamp(i32::MIN as i64, i32::MAX as i64) as i32;
+            imgui::drag_int(l, &mut x, s as f32, min as i32, max as i32);
+            x as i64
+        })
+        .def("selectable", &["label: string", "selected: bool", "bool"], "A row that can be clicked, highlighted while selected; true when clicked.", |l: &str, s: bool| imgui::selectable(l, s))
+        .def("list_box", &["label: string", "index: int", "items: array", "height_items: int", "int"], "A list box of items (strings), height_items rows tall (-1: default); returns the chosen index.", |l: &str, i: i64, items: Array, h: i64| {
+            let items: Vec<String> = items.iter().map(|v| v.to_string()).collect();
+            let mut i = i.clamp(-1, items.len() as i64 - 1) as i32;
+            imgui::list_box(l, &mut i, &items.iter().map(String::as_str).collect::<Vec<_>>(), h as i32);
+            i as i64
+        })
+        .def("tree_node", &["label: string", "bool"], "A tree node; true while open. Call tree_pop() only then.", |l: &str| imgui::tree_node(l))
+        .def("tree_pop", &["()"], "Ends the tree node.", imgui::tree_pop)
+        .def("begin_table", &["id: string", "columns: int", "flags: int", "bool"], "A table; flags added up: 1920 borders, 64 row stripes, 1 resizable columns. Call end_table() only when this returned true.", |id: &str, n: i64, f: i64| imgui::begin_table(id, n as i32, f as i32))
+        .def("end_table", &["()"], "Ends the table.", imgui::end_table)
+        .def("table_setup_column", &["label: string", "()"], "Names the next column (once per column, then table_headers_row()).", |l: &str| imgui::table_setup_column(l))
+        .def("table_headers_row", &["()"], "A row of the column names.", imgui::table_headers_row)
+        .def("table_next_row", &["()"], "Starts a new row.", imgui::table_next_row)
+        .def("table_next_column", &["bool"], "Moves to the next cell (wrapping to a new row); true when it is visible.", imgui::table_next_column)
+        .def("open_popup", &["id: string", "()"], "Opens the popup id (e.g. when a button is clicked).", |id: &str| imgui::open_popup(id))
+        .def("begin_popup", &["id: string", "bool"], "True while the popup id is open. Call end_popup() only then.", |id: &str| imgui::begin_popup(id))
+        .def("begin_popup_modal", &["title: string", "bool"], "A modal popup opened with open_popup(title). Call end_popup() only when this returned true.", |t: &str| imgui::begin_popup_modal(t))
+        .def("end_popup", &["()"], "Ends the popup.", imgui::end_popup)
+        .def("close_current_popup", &["()"], "Closes the popup this is called in.", imgui::close_current_popup)
+        .def("is_item_hovered", &["bool"], "Whether the mouse is over the widget just drawn.", imgui::is_item_hovered)
+        .def("item_tooltip", &["text: string", "()"], "Shows text in a tooltip while the mouse rests on the widget just drawn.", |s: &str| imgui::item_tooltip(s))
+        .def("plot_lines", &["label: string", "values: array", "height: float", "()"], "A line graph of values (numbers), height pixels tall (0: default).", |l: &str, v: Array, h: f64| imgui::plot_lines(l, &floats(&v), h as f32))
+        .def("plot_histogram", &["label: string", "values: array", "height: float", "()"], "A bar graph of values (numbers), height pixels tall (0: default).", |l: &str, v: Array, h: f64| imgui::plot_histogram(l, &floats(&v), h as f32))
         .def("ctrl_shortcut", &["key: string", "bool"], "True on the frame Ctrl and the letter were pressed, also while typing in a text field.", |k: &str| k.chars().next().is_some_and(imgui::ctrl_shortcut));
 
     // menu entries (only inside menu(), which runs inside the "Mods" menu)

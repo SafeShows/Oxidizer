@@ -5,6 +5,10 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ## [Unreleased]
 
+### Added
+
+- More ImGui widgets for Rust and Rhai: tree nodes (`tree_node`, `tree_pop`), tables (`begin_table`, `table_setup_column`, `table_headers_row`, `table_next_row`, `table_next_column`, `end_table`), popups (`open_popup`, `begin_popup`, `begin_popup_modal`, `end_popup`, `close_current_popup`), tooltips (`item_tooltip(text)`, `is_item_hovered`; Rust also `begin_tooltip`/`end_tooltip`), plots (`plot_lines`, `plot_histogram`), `radio_button`, `selectable`, `list_box`, `slider_int`, `drag_float`, `drag_int`, `text_wrapped`, `spacing`, and `begin_ex(title, flags)` / `begin_child_ex(id, w, h, border)` for window flags and sized child regions (`oxidizer_api` 0.9.0, with `imgui::window_flags` and `imgui::table_flags`).
+
 ## [0.14.0] - 2026-11-23
 
 ### Added
