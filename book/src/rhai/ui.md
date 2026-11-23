@@ -99,10 +99,53 @@ fn gui(dt) {
 | `set_cursor_pos(x, y)` | Puts the next widget at x, y pixels from the window's top-left corner. 0.14+. |
 | `set_next_item_width(width)` | The next widget's width in pixels. 0.14+. |
 | `set_next_window_pos(x, y)` | The next window's position on the screen the first time it is shown. 0.14+. |
+| `tree_node(label)` / `tree_pop()` | A tree node; true while open. Call `tree_pop()` only then. 0.15+. |
+| `begin_table(id, columns, flags)` | A table (flags added up: 1920 borders, 64 row stripes, 1 resizable). Then `table_setup_column(label)` per column and `table_headers_row()`, `table_next_column()` before each cell, `end_table()` only when it returned true. 0.15+. |
+| `open_popup(id)` / `begin_popup(id)` / `end_popup()` | A popup: open it (e.g. when a button is clicked); `begin_popup` is true while it is open. Also `begin_popup_modal(title)`, `close_current_popup()`. 0.15+. |
+| `item_tooltip(text)` | A tooltip for the widget just drawn. `is_item_hovered()` tells whether the mouse is on it. 0.15+. |
+| `plot_lines(label, values, height)` / `plot_histogram(...)` | A line or bar graph of an array of numbers. 0.15+. |
+| `radio_button(label, active)` | True when clicked: `if radio_button("A", this.mode == 0) { this.mode = 0; }`. 0.15+. |
+| `selectable(label, selected)`, `list_box(label, index, items, rows)` | A clickable row; a list of strings (returns the chosen index). 0.15+. |
+| `slider_int`, `drag_float`, `drag_int` | Whole-number slider, numbers dragged with the mouse (min == max: no bounds); return the new value. 0.15+. |
+| `text_wrapped(text)`, `spacing()` | Text wrapped at the window's edge; a little vertical space. 0.15+. |
+| `begin_ex(title, flags)`, `begin_child_ex(id, w, h, border)` | `begin` with window flags (added up: 1 no title bar, 2 no resize, 4 no move, 32 no collapse, 64 auto-resize); a sized child region. 0.15+. |
 
 Store what the text and number functions return, as with `checkbox`: a field shows what you pass in, so `input_text("Name", this.name)` without storing the result would undo the player's typing every frame. Sizes are floats: write `300.0`, not `300`.
 
 Widgets in one window need different labels. To show the same label twice, add `##` and something unique: `button("Go##1")`, `button("Go##2")`. Only the part before `##` is shown.
+
+## KSA's own UI (0.15+)
+
+The game draws its windows with its own kit: a title bar with a short signature tag, a body, a footer, and styled controls. The `ksa_*` functions draw with it, so a mod window looks like the rest of the game:
+
+```rust
+fn gui(dt) {
+    if !this.visible { return; }
+    if ksa_begin_window("my_mod", "My mod", "MOD", 420.0, 300.0, 0) {
+        ksa_begin_body();
+        ksa_push_widget_style();
+        ksa_region_header("Orbit");
+        ksa_readout("Apoapsis", "182.4 km");
+        ksa_begin_row("Enabled");
+        this.on = ksa_checkbox("on", this.on);
+        ksa_end_row();
+        ksa_begin_row("Throttle");
+        this.throttle = ksa_slider_float("throttle", this.throttle, 0.0, 1.0, `${this.throttle}`);
+        ksa_end_row();
+        if ksa_positive_button("Start") { /* ... */ }
+        ksa_pop_widget_style();
+        ksa_end_body();
+        ksa_begin_footer();
+        ksa_footer_status("Ready");
+        ksa_end_footer();
+        ksa_end_window();   // only when ksa_begin_window returned true: otherwise it is already ended
+    }
+}
+```
+
+Controls: `ksa_button`, `ksa_primary_button`, `ksa_positive_button`, `ksa_danger_button`, `ksa_checkbox(id, v)`, `ksa_slider_float` / `ksa_slider_int` / `ksa_drag_float` / `ksa_drag_int(id, v, min, max, text)` (text is what the control shows), `ksa_combo(id, index, items)`, `ksa_text_line(id, s)`, `ksa_color_edit(id, [r, g, b])`, `ksa_segmented(id, items, index)`, `ksa_readout(key, value)`, `ksa_value_text(text)`, `ksa_region_header(label)`, `ksa_rule()`, `ksa_item_tooltip(text)`. Like the plain widgets, the value functions return the new value: store it. Put a control in `ksa_begin_row(label)` / `ksa_end_row()` to give it a label. Plain widgets work in a KSA window too: `ksa_push_widget_style()` gives them KSA's look.
+
+[ImGui Editor](https://safeshows.github.io/imgui-editor/) designs these windows in the browser and writes the code (tick *KSA look*).
 
 ## The Mods menu
 

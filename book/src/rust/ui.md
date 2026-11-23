@@ -76,6 +76,31 @@ fn menu(&mut self) {
 
 Widgets in one window need different labels; add `##` and something unique to show the same label twice (`"Go##1"`, `"Go##2"`).
 
+## KSA's own UI (0.15+)
+
+[`oxidizer_api::ksa_ui`](https://docs.rs/oxidizer_api/latest/oxidizer_api/ksa_ui/) draws with the game's own kit (API version 8, `oxidizer_api` 0.9): windows with KSA's title bar, signature tag, body and footer, labelled rows and styled controls.
+
+```rust
+use oxidizer_api::ksa_ui;
+
+if ksa_ui::begin_window("my_mod", "My mod", "MOD", Some(&mut self.visible), 420.0, 300.0, 0) {
+    ksa_ui::begin_body();
+    ksa_ui::push_widget_style();
+    ksa_ui::begin_row("Enabled");
+    ksa_ui::checkbox("enabled", &mut self.enabled);
+    ksa_ui::end_row();
+    if ksa_ui::positive_button("Start") { /* ... */ }
+    ksa_ui::pop_widget_style();
+    ksa_ui::end_body();
+    ksa_ui::begin_footer();
+    ksa_ui::footer_status("Ready");
+    ksa_ui::end_footer();
+    ksa_ui::end_window(); // only when begin_window returned true: otherwise it is already ended
+}
+```
+
+`imgui` also gained tree nodes, tables, popups, tooltips, plots, radio buttons, selectables, list boxes, int sliders, drags, `text_wrapped`, `spacing`, `begin_ex` (window flags) and `begin_child_ex` in 0.9. [ImGui Editor](https://safeshows.github.io/imgui-editor/) designs windows in the browser and writes this code.
+
 ## More than the wrappers
 
 The wrappers cover common widgets. For anything else ImGui can do, call the game's ImGui library yourself: it exports Dear ImGui's functions by name (`Begin`, `InputTextMultiline`, `GetWindowDrawList`, ...). [Rhai Studio](https://github.com/SafeShows/oxidizer-rhai-studio)'s `gfx.rs` loads extra functions this way, for its colored editor, and its `theme.rs` styles a window like the game's own dialogs.

@@ -5,6 +5,8 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ## [Unreleased]
 
+## [0.15.0] - 2026-11-23
+
 ### Added
 
 - KSA's own UI kit for Rust and Rhai, so mod windows look like the game's: `KSA.ConsoleStyle` windows (title bar with a signature tag, body, footer and status) and `KSA.ConsoleWidgets` controls (normal, primary, positive and danger buttons, region headers, rules, readouts, labelled rows, checkboxes, sliders, drags, combos, text lines, color swatches, segmented buttons, tooltips). Rust: `oxidizer_api::ksa_ui` (API version 8). Rhai: `ksa_begin_window`, `ksa_end_window`, `ksa_begin_body`, `ksa_end_body`, `ksa_begin_footer`, `ksa_end_footer`, `ksa_footer_status`, `ksa_push_widget_style`, `ksa_pop_widget_style`, `ksa_button`, `ksa_primary_button`, `ksa_positive_button`, `ksa_danger_button`, `ksa_region_header`, `ksa_rule`, `ksa_readout`, `ksa_value_text`, `ksa_begin_row`, `ksa_end_row`, `ksa_checkbox`, `ksa_slider_float`, `ksa_slider_int`, `ksa_drag_float`, `ksa_drag_int`, `ksa_combo`, `ksa_text_line`, `ksa_color_edit`, `ksa_segmented`, `ksa_item_tooltip`.
@@ -224,7 +226,9 @@ First release.
 - When a method has several overloads, `call` and patching use the first one with a matching number of arguments.
 - Hooks can't read or change a patched method's return value.
 
-[Unreleased]: https://github.com/SafeShows/Oxidizer/compare/v0.13.0...HEAD
+[Unreleased]: https://github.com/SafeShows/Oxidizer/compare/v0.15.0...HEAD
+[0.15.0]: https://github.com/SafeShows/Oxidizer/compare/v0.14.0...v0.15.0
+[0.14.0]: https://github.com/SafeShows/Oxidizer/compare/v0.13.0...v0.14.0
 [0.13.0]: https://github.com/SafeShows/Oxidizer/compare/v0.12.0...v0.13.0
 [0.12.0]: https://github.com/SafeShows/Oxidizer/compare/v0.11.0...v0.12.0
 [0.11.0]: https://github.com/SafeShows/Oxidizer/compare/v0.10.0...v0.11.0

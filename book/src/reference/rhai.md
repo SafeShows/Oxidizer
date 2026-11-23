@@ -111,6 +111,8 @@ See [Hooks](../rhai/hooks.md).
 | `set_next_item_width(width: float)` | `()` | The next widget's width in pixels (negative: the row minus that much). 0.14+. |
 | `set_next_window_pos(x: float, y: float)` | `()` | The next window's screen position the first time it is shown. 0.14+. |
 
+More widgets (0.15+): `tree_node`, `tree_pop`, `begin_table`, `table_setup_column`, `table_headers_row`, `table_next_row`, `table_next_column`, `end_table`, `open_popup`, `begin_popup`, `begin_popup_modal`, `end_popup`, `close_current_popup`, `is_item_hovered`, `item_tooltip`, `plot_lines`, `plot_histogram`, `radio_button`, `selectable`, `list_box`, `slider_int`, `drag_float`, `drag_int`, `text_wrapped`, `spacing`, `begin_ex`, `begin_child_ex`. KSA's own UI kit: the `ksa_*` functions. Both are described in [Windows and menus](../rhai/ui.md); editors show each one's parameters.
+
 ## The Mods menu (inside `menu`)
 
 | Function | Returns | Does |
