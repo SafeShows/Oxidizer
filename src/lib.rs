@@ -55,6 +55,8 @@ pub struct Internal {
     pub starmap_error: Option<extern "C" fn(*mut u8, usize) -> usize>,
     /// Type names whose subscriptions still wait for their StarMap mod, one per line.
     pub starmap_waiting: Option<extern "C" fn(*mut u8, usize) -> usize>,
+    /// KSA's UI kit (bridge/KsaUi.cs): see oxidizer_api::ksa_ui. None from an older bridge.
+    pub ksa_ui: Option<extern "C" fn(i32, *const usize, usize, *mut f32, *mut i32, *mut u8, *mut u8, usize, *mut usize) -> u8>,
 }
 
 static INTERNAL: OnceLock<&'static Internal> = OnceLock::new();
@@ -174,6 +176,15 @@ extern "C" fn api_starmap_publish(t: *const u8, tn: usize, ch: *const u8, chn: u
     }
 }
 
+/// API version 8: KSA's UI kit, from the bridge (0 = not drawn, also with an older bridge).
+#[allow(clippy::too_many_arguments)]
+extern "C" fn api_ksa_ui(op: i32, s: *const usize, n: usize, f: *mut f32, i: *mut i32, b: *mut u8, out: *mut u8, cap: usize, out_len: *mut usize) -> u8 {
+    match internal().ksa_ui {
+        Some(call) => call(op, s, n, f, i, b, out, cap, out_len),
+        None => 0,
+    }
+}
+
 extern "C" fn api_starmap_forward(t: *const u8, tn: usize, ch: *const u8, chn: usize) -> u8 {
     let r = starmap::forward(text(t, tn), text(ch, chn));
     let ok = r.is_ok();
@@ -267,6 +278,8 @@ pub unsafe fn attach(bridge_init: BridgeInit, instance: &str) -> Result<(), Stri
         (&raw mut (*p).starmap_unsubscribe).write(api_starmap_unsubscribe);
         (&raw mut (*p).starmap_publish).write(api_starmap_publish);
         (&raw mut (*p).starmap_forward).write(api_starmap_forward);
+        // API version 8: KSA's UI kit.
+        (&raw mut (*p).ksa_ui).write(api_ksa_ui);
         let api: &'static Api = api.assume_init_ref();
         oxidizer_api::set_api(api);
         load_mods(api);

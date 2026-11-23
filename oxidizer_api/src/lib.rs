@@ -13,6 +13,7 @@ use std::sync::OnceLock;
 pub mod bind;
 pub mod bus;
 pub mod imgui;
+pub mod ksa_ui;
 pub mod physics;
 pub mod save;
 pub mod starmap;
@@ -30,7 +31,7 @@ pub use serde_json;
 /// Version 5 added the event bus and services, and gave each mod its own table with its id.
 /// Version 6 added physics forces ([`physics`]), per-save data ([`save`]) and `Mod::saving` / `Mod::save_loaded`.
 /// Version 7 added StarMap's event bus ([`starmap`]).
-pub const API_VERSION: u32 = 7;
+pub const API_VERSION: u32 = 8;
 
 /// .NET GCHandle. 0 = null.
 pub type Handle = usize;
@@ -121,6 +122,10 @@ pub struct Api {
     pub starmap_publish: extern "C" fn(*const u8, usize, *const u8, usize, *const u8, usize, Handle) -> u8,
     /// (type name, channel) -> 1 and the Oxidizer bus topic in `last_text`, or 0 and the error.
     pub starmap_forward: extern "C" fn(*const u8, usize, *const u8, usize) -> u8,
+    // ---- API version 8 (filled by the loader) ----
+    /// KSA's UI kit: (op, UTF-8 (pointer, length) string pairs, count, floats, ints, bools, text out buffer, its
+    /// capacity, out length) -> result. See [`ksa_ui`].
+    pub ksa_ui: extern "C" fn(i32, *const usize, usize, *mut f32, *mut i32, *mut u8, *mut u8, usize, *mut usize) -> u8,
 }
 
 // The table only holds function pointers and a pointer to a string that lives as long as the process.

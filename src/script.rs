@@ -5,7 +5,7 @@
 //! e.g. `this.show = checkbox("Show", this.show ?? false);`.
 
 use crate::{log, ui};
-use oxidizer_api::{Handle, Obj, imgui};
+use oxidizer_api::{Handle, Obj, imgui, ksa_ui};
 use rhai::{Array, CallFnOptions, Dynamic, Engine, EvalAltResult, FuncArgs, FuncRegistration, Map, RhaiNativeFunc, Scope, Variant, AST};
 use std::cell::Cell;
 use std::collections::HashSet;
@@ -739,6 +739,72 @@ fn engine() -> Engine {
         .def("item_tooltip", &["text: string", "()"], "Shows text in a tooltip while the mouse rests on the widget just drawn.", |s: &str| imgui::item_tooltip(s))
         .def("plot_lines", &["label: string", "values: array", "height: float", "()"], "A line graph of values (numbers), height pixels tall (0: default).", |l: &str, v: Array, h: f64| imgui::plot_lines(l, &floats(&v), h as f32))
         .def("plot_histogram", &["label: string", "values: array", "height: float", "()"], "A bar graph of values (numbers), height pixels tall (0: default).", |l: &str, v: Array, h: f64| imgui::plot_histogram(l, &floats(&v), h as f32))
+        // KSA's own UI kit (oxidizer_api::ksa_ui): windows and controls that look like the game's
+        .def("ksa_begin_window", &["id: string", "title: string", "signature: string", "width: float", "height: float", "flags: int", "bool"], "A KSA window (title bar with a signature tag, body, footer). Only when it returns true: draw, then ksa_end_window(); when false it is already ended.", |id: &str, t: &str, s: &str, w: f64, h: f64, f: i64| ksa_ui::begin_window(id, t, s, None, w as f32, h as f32, f as i32))
+        .def("ksa_end_window", &["()"], "Ends ksa_begin_window (only after it returned true).", ksa_ui::end_window)
+        .def("ksa_begin_body", &["()"], "The KSA window's content area; then ksa_end_body().", ksa_ui::begin_body)
+        .def("ksa_end_body", &["()"], "Ends the content area.", ksa_ui::end_body)
+        .def("ksa_begin_footer", &["()"], "The KSA window's bottom bar; then ksa_end_footer().", ksa_ui::begin_footer)
+        .def("ksa_end_footer", &["()"], "Ends the bottom bar.", ksa_ui::end_footer)
+        .def("ksa_footer_status", &["text: string", "()"], "Status text in the footer.", |t: &str| ksa_ui::footer_status(t))
+        .def("ksa_push_widget_style", &["()"], "KSA's look for plain widgets; then ksa_pop_widget_style().", ksa_ui::push_widget_style)
+        .def("ksa_pop_widget_style", &["()"], "Ends ksa_push_widget_style.", ksa_ui::pop_widget_style)
+        .def("ksa_button", &["label: string", "bool"], "A KSA button; true when clicked.", |l: &str| ksa_ui::button(l))
+        .def("ksa_primary_button", &["label: string", "bool"], "The main action's button; true when clicked.", |l: &str| ksa_ui::primary_button(l))
+        .def("ksa_positive_button", &["label: string", "bool"], "A green button; true when clicked.", |l: &str| ksa_ui::positive_button(l))
+        .def("ksa_danger_button", &["label: string", "bool"], "A red button; true when clicked.", |l: &str| ksa_ui::danger_button(l))
+        .def("ksa_region_header", &["label: string", "()"], "A section title with a rule under it.", |l: &str| ksa_ui::region_header(l))
+        .def("ksa_rule", &["()"], "A horizontal rule.", ksa_ui::rule)
+        .def("ksa_readout", &["key: string", "value: string", "()"], "A key and its value in a column.", |k: &str, v: &str| ksa_ui::readout(k, v))
+        .def("ksa_value_text", &["text: string", "()"], "Text in the value style.", |t: &str| ksa_ui::value_text(t))
+        .def("ksa_begin_row", &["label: string", "()"], "A labelled row for the next control; then ksa_end_row().", |l: &str| ksa_ui::begin_row(l))
+        .def("ksa_end_row", &["()"], "Ends the row.", ksa_ui::end_row)
+        .def("ksa_checkbox", &["id: string", "value: bool", "bool"], "A KSA checkbox; returns the new value.", |id: &str, mut v: bool| {
+            ksa_ui::checkbox(id, &mut v);
+            v
+        })
+        .def("ksa_slider_float", &["id: string", "value: float", "min: float", "max: float", "text: string", "float"], "A KSA slider showing text; returns the new value.", |id: &str, v: f64, min: f64, max: f64, t: &str| {
+            let mut x = v as f32;
+            ksa_ui::slider_float(id, &mut x, min as f32, max as f32, t);
+            x as f64
+        })
+        .def("ksa_slider_int", &["id: string", "value: int", "min: int", "max: int", "text: string", "int"], "A KSA whole-number slider showing text; returns the new value.", |id: &str, v: i64, min: i64, max: i64, t: &str| {
+            let mut x = v as i32;
+            ksa_ui::slider_int(id, &mut x, min as i32, max as i32, t);
+            x as i64
+        })
+        .def("ksa_drag_float", &["id: string", "value: float", "min: float", "max: float", "text: string", "float"], "A KSA number dragged with the mouse; returns the new value.", |id: &str, v: f64, min: f64, max: f64, t: &str| {
+            let mut x = v as f32;
+            ksa_ui::drag_float(id, &mut x, min as f32, max as f32, t);
+            x as f64
+        })
+        .def("ksa_drag_int", &["id: string", "value: int", "min: int", "max: int", "text: string", "int"], "A KSA whole number dragged with the mouse; returns the new value.", |id: &str, v: i64, min: i64, max: i64, t: &str| {
+            let mut x = v as i32;
+            ksa_ui::drag_int(id, &mut x, min as i32, max as i32, t);
+            x as i64
+        })
+        .def("ksa_combo", &["id: string", "index: int", "items: array", "int"], "A KSA drop-down of items (strings); returns the chosen index.", |id: &str, i: i64, items: Array| {
+            let items: Vec<String> = items.iter().map(|v| v.to_string()).collect();
+            let mut x = i as i32;
+            ksa_ui::combo(id, &mut x, &items.iter().map(String::as_str).collect::<Vec<_>>());
+            x as i64
+        })
+        .def("ksa_text_line", &["id: string", "text: string", "string"], "A KSA text field; returns the new text.", |id: &str, t: &str| {
+            let mut s = t.to_string();
+            ksa_ui::text_line(id, &mut s);
+            s
+        })
+        .def("ksa_color_edit", &["id: string", "color: array", "array"], "A KSA color swatch; returns [r, g, b], 0.0 to 1.0.", |id: &str, c: Array| {
+            let [r, g, b, _] = rgba(&c);
+            let mut rgb = [r, g, b];
+            ksa_ui::color_edit(id, &mut rgb);
+            rgb.iter().map(|&x| Dynamic::from(x as f64)).collect::<Array>()
+        })
+        .def("ksa_segmented", &["id: string", "items: array", "active: int", "int"], "Joined toggle buttons of items (strings); returns the chosen index.", |id: &str, items: Array, a: i64| {
+            let items: Vec<String> = items.iter().map(|v| v.to_string()).collect();
+            ksa_ui::segmented(id, &items.iter().map(String::as_str).collect::<Vec<_>>(), a as i32) as i64
+        })
+        .def("ksa_item_tooltip", &["text: string", "()"], "KSA's tooltip for the widget just drawn.", |t: &str| ksa_ui::item_tooltip(t))
         .def("ctrl_shortcut", &["key: string", "bool"], "True on the frame Ctrl and the letter were pressed, also while typing in a text field.", |k: &str| k.chars().next().is_some_and(imgui::ctrl_shortcut));
 
     // menu entries (only inside menu(), which runs inside the "Mods" menu)

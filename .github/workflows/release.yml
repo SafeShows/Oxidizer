@@ -38,13 +38,20 @@ jobs:
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v5
+      # KSA's own assemblies, compile-only for the bridge (bridge/KsaUi.cs). Private: never shipped or published.
+      - uses: actions/checkout@v5
+        with:
+          repository: SafeShows/ksa-game-assemblies
+          ssh-key: ${{ secrets.KSA_ASSEMBLIES_KEY }}
+          path: ksa-game-assemblies
       - uses: actions/setup-dotnet@v5
         with:
           dotnet-version: 10.0.x
 
       - name: Build
+        shell: bash
         run: |
-          dotnet build bridge -c Release -o target/bridge
+          dotnet build bridge -c Release -o target/bridge -p:KsaDir="$GITHUB_WORKSPACE/ksa-game-assemblies/current/dll"
           cargo build --release --workspace
 
       - name: Package

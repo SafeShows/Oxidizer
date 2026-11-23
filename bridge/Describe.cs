@@ -26,6 +26,7 @@ public unsafe struct Internal
     public delegate* unmanaged<byte*, nuint, nuint> StarMapJson;
     public delegate* unmanaged<byte*, nuint, nuint> StarMapError;
     public delegate* unmanaged<byte*, nuint, nuint> StarMapWaiting;
+    public delegate* unmanaged<int, nuint*, nuint, float*, int*, byte*, byte*, nuint, nuint*, byte> KsaUi; // KsaUi.Call
 }
 
 public static unsafe class Describer
@@ -49,6 +50,7 @@ public static unsafe class Describer
         i->StarMapJson = &StarMapEvents.LastJson;
         i->StarMapError = &StarMapEvents.LastError;
         i->StarMapWaiting = &StarMapEvents.Waiting;
+        i->KsaUi = &KsaUi.Call;
     }
 
     /// The public types and members of KSA.dll, one per line, tab-separated:

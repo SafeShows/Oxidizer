@@ -5,7 +5,16 @@
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
     <CopyLocalLockFileAssemblies>true</CopyLocalLockFileAssemblies>
     <GenerateDependencyFile>false</GenerateDependencyFile>
+    <!-- The game's assemblies, compile-only (never copied): the install locally, SafeShows/ksa-game-assemblies in CI. -->
+    <KsaDir Condition="'$(KsaDir)' == ''">C:\Program Files\Ahwoo\Games\Kitten Space Agency</KsaDir>
   </PropertyGroup>
+  <ItemGroup>
+    <Reference Include="$(KsaDir)\KSA.dll" Private="false" />
+    <Reference Include="$(KsaDir)\Brutal.ImGui.dll" Private="false" />
+    <Reference Include="$(KsaDir)\Brutal.Numerics.dll" Private="false" />
+    <Reference Include="$(KsaDir)\Brutal.Core.dll" Private="false" />
+    <Reference Include="$(KsaDir)\Brutal.Strings.dll" Private="false" />
+  </ItemGroup>
   <ItemGroup>
     <PackageReference Include="Lib.Harmony" Version="2.4.2" />
     <!-- Compile-only: StarMap provides StarMap.API at runtime, and mods must not ship it. -->
